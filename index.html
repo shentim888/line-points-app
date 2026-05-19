@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的會員集點卡</title>
+    <!-- 引入 LINE LIFF 的官方 SDK 套件 -->
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f4f4f4;
+            padding-top: 50px;
+        }
+        .card {
+            background-color: white;
+            border-radius: 15px;
+            padding: 30px;
+            width: 80%;
+            max-width: 350px;
+            margin: 0 auto;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        h1 { color: #2cb42c; }
+        .user-name { font-size: 20px; font-weight: bold; margin: 20px 0; }
+        .loading { color: #888; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h1>數位集點卡</h1>
+        <!-- 這裡用來顯示使用者的名字 -->
+        <div id="username" class="loading">正在載入您的 LINE 資訊...</div>
+        <p>歡迎來到您的專屬集點頁面！</p>
+    </div>
+
+    <script>
+        // 【重要】請把下方的 '你的LIFF_ID' 改成你自己的 LIFF ID
+        // 例如你的網址是 https://liff.line.me/123456-abcde，那你的 LIFF ID 就是 '123456-abcde'
+        const myLiffId = '2010135064-mXyTOHst'; 
+
+        // 初始化 LINE LIFF 系統
+        liff.init({ liffId: myLiffId })
+            .then(() => {
+                // 檢查使用者是否已經在 LINE 登入
+                if (!liff.isLoggedIn()) {
+                    // 如果沒有登入，引導使用者登入
+                    liff.login();
+                } else {
+                    // 如果登入成功，去抓取使用者的個人資料
+                    liff.getProfile()
+                        .then(profile => {
+                            // 把網頁上的「正在載入...」換成使用者的 LINE 名字
+                            document.getElementById('username').innerText = "嗨！ " + profile.displayName;
+                            document.getElementById('username').classList.remove('loading');
+                        })
+                        .catch(err => console.error('抓取資料失敗：', err));
+                }
+            })
+            .catch(err => {
+                console.error('LIFF 初始化失敗：', err);
+                document.getElementById('username').innerText = "系統初始化失敗，請稍後再試";
+            });
+    </script>
+
+</body>
+</html>
