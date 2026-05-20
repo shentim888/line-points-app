@@ -25,7 +25,7 @@
 
         // 統一使用第一個官方認證的最基礎 LIFF ID
         const myLiffId = '2010135064-mXyTOHst'; 
-        let targetUserId = ""; // 店員端掃描到的客人UID
+        let targetUserId = ""; 
 
         window.onload = function() {
             liff.init({ liffId: myLiffId, withLoginOnExternalBrowser: true })
@@ -33,17 +33,14 @@
                     if (!liff.isLoggedIn()) {
                         liff.login();
                     } else {
-                        // 【關鍵分流邏輯】檢查網址後面有沒有帶店員暗號 "?mode=staff"
                         const urlParams = new URLSearchParams(window.location.search);
                         const isStaff = urlParams.get('mode') === 'staff';
 
                         if (isStaff) {
-                            // 顯示店員畫面，隱藏顧客畫面
                             document.getElementById('customer-view').style.display = "none";
                             document.getElementById('staff-view').style.display = "block";
                             document.getElementById('staff-status').innerText = "管理員就緒。網域安全檢查通過。";
                         } else {
-                            // 顯示顧客畫面
                             document.getElementById('customer-view').style.display = "block";
                             document.getElementById('staff-view').style.display = "none";
                             
@@ -57,8 +54,17 @@
                         }
                     }
                 })
-                .catch(err => alert("系統初始化失敗: " + err));
+                .catch(err => showCustomAlert("系統初始化失敗: " + err));
         };
+
+        // 自訂商用彈窗控制函式（徹底消滅網址抬頭）
+        function showCustomAlert(msg) {
+            document.getElementById('alert-msg').innerText = msg;
+            document.getElementById('custom-alert-overlay').style.display = "flex";
+        }
+        function closeCustomAlert() {
+            document.getElementById('custom-alert-overlay').style.display = "none";
+        }
 
         // ==========================================
         // 顧客端專用核心函式
@@ -118,7 +124,7 @@
                     }
                 })
                 .catch(err => {
-                    alert("相機喚醒失敗，請確認是否允許 LINE 相機權限。錯誤訊號: " + JSON.stringify(err));
+                    showCustomAlert("相機喚醒失敗，請確認是否允許 LINE 相機權限。");
                 });
         }
 
@@ -134,6 +140,7 @@
             } catch (e) { document.getElementById('customer-name-display').innerText = "讀取失敗"; }
         }
 
+        // 點數「加、減」按鈕
         function changePoints(amount) {
             const input = document.getElementById('points-input');
             let next = (parseInt(input.value) || 0) + amount;
@@ -141,6 +148,7 @@
             document.getElementById('expiry-group').style.display = next < 0 ? "none" : "block";
         }
 
+        // 快捷天數切換
         function setExpireDays(days) {
             document.getElementById('custom-days-input').style.display = days === 'custom' ? "block" : "none";
             document.getElementById('custom-days-input').value = days === 'custom' ? "30" : days;
@@ -149,15 +157,17 @@
         async function confirmSubmit() {
             const pointsChange = parseInt(document.getElementById('points-input').value);
             const remark = document.getElementById('remark-input').value.trim();
-            if (pointsChange === 0) { alert("點數不能為 0"); return; }
-            if (document.getElementById('staff-pass').value !== "1234") { alert("密碼錯誤！"); return; }
-            if (pointsChange < 0 && !remark) { alert("扣點時，必須填寫備註原因！"); return; }
+            if (pointsChange === 0) { showCustomAlert("點數不能為 0"); return; }
+            
+            // 【密碼變更】已改為您指定的預設密碼 "0412"
+            if (document.getElementById('staff-pass').value !== "0412") { showCustomAlert("管理密碼錯誤！"); return; }
+            if (pointsChange < 0 && !remark) { showCustomAlert("扣點時，必須填寫備註原因！"); return; }
 
             try {
                 const userDocRef = doc(db, "users", targetUserId);
                 const userDocSnap = await getDoc(userDocRef);
                 let currentPoints = userDocSnap.exists() ? (userDocSnap.data().totalPoints || 0) : 0;
-                if (pointsChange < 0 && (currentPoints + pointsChange) < 0) { alert("顧客點數不足！"); return; }
+                if (pointsChange < 0 && (currentPoints + pointsChange) < 0) { showCustomAlert("顧客點數不足！"); return; }
 
                 const now = new Date();
                 const logRef = collection(db, "users", targetUserId, "point_log");
@@ -189,19 +199,19 @@
 
                 let newPoints = currentPoints + pointsChange;
                 await setDoc(userDocRef, { totalPoints: newPoints < 0 ? 0 : newPoints }, { merge: true });
-                alert("操作成功！最新餘額：" + (newPoints < 0 ? 0 : newPoints));
+                showCustomAlert("操作成功！最新餘額：" + (newPoints < 0 ? 0 : newPoints));
                 document.getElementById('action-panel').style.display = "none";
-            } catch (e) { alert("雲端寫入失敗"); }
+            } catch (e) { showCustomAlert("雲端寫入失敗"); }
         }
 
-        window.startScan = startScan; window.changePoints = changePoints; window.setExpireDays = setExpireDays; window.confirmSubmit = confirmSubmit;
+        window.startScan = startScan; window.changePoints = changePoints; window.setExpireDays = setExpireDays; window.confirmSubmit = confirmSubmit; window.closeCustomAlert = closeCustomAlert;
     </script>
 
     <style>
         body { font-family: Arial, sans-serif; text-align: center; background-color: #f4f4f4; padding: 15px 10px; color: #333; }
         .card { background-color: white; border-radius: 15px; padding: 20px; width: 95%; max-width: 360px; margin: 0 auto 20px auto; box-shadow: 0 4px 8px rgba(0,0,0,0.1); box-sizing: border-box; }
         h1, h2 { color: #2cb42c; font-size: 24px; margin: 5px 0; }
-        h2 { color: #1a73e8; }
+        h2 { color: #d66a8a; } /* 配合粉色調微調後台標題顏色 */
         .user-name { font-size: 18px; font-weight: bold; margin: 10px 0; }
         .points-section { background-color: #eafaea; border: 2px dashed #2cb42c; border-radius: 10px; padding: 10px; margin: 15px 0; }
         .points-num { font-size: 42px; font-weight: bold; color: #2cb42c; }
@@ -210,18 +220,31 @@
         .history-list { list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto; font-size: 13px; }
         .history-list li { padding: 8px 0; border-bottom: 1px solid #eee; }
         
-        /* 店員樣式 */
-        .scan-btn { width: 100%; padding: 15px; background-color: #2cb42c; color: white; border: none; border-radius: 8px; font-size: 18px; cursor: pointer; font-weight: bold; margin: 15px 0; }
-        .status-box { background: #f8f9fa; border-left: 4px solid #1a73e8; padding: 10px; font-size: 13px; text-align: left; }
+        /* 【店員樣式更新】掃描會員按鈕改為淡粉紅色 (#ffccd5 / 點擊時 #f4b4c0) */
+        .scan-btn { width: 100%; padding: 15px; background-color: #ffccd5; color: #d66a8a; border: none; border-radius: 8px; font-size: 18px; cursor: pointer; font-weight: bold; margin: 15px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.05); transition: background 0.2s; }
+        .scan-btn:hover { background-color: #f4b4c0; }
+        
+        .status-box { background: #f8f9fa; border-left: 4px solid #ffccd5; padding: 10px; font-size: 13px; text-align: left; }
         .panel { display: none; border-top: 2px dashed #ccc; padding-top: 15px; text-align: left; }
         .counter-box { display: flex; align-items: center; }
         .btn-counter { width: 45px; height: 40px; background: #ddd; border: none; font-size: 20px; font-weight: bold; }
         .input-points { width: 70px; height: 40px; text-align: center; font-size: 18px; border: 1px solid #ccc; }
         .radio-group { display: flex; flex-wrap: wrap; gap: 10px; margin: 5px 0; }
         .radio-btn { background: #fff; border: 1px solid #ccc; padding: 8px 12px; border-radius: 5px; font-size: 13px; }
-        .radio-btn:has(input:checked) { background: #1a73e8; color: white; }
+        .radio-btn:has(input:checked) { background: #ffccd5; color: #d66a8a; border-color: #ffccd5; }
         input[type="text"], input[type="password"], input[type="number"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
-        .submit-btn { width: 100%; padding: 12px; background-color: #1a73e8; color: white; border: none; font-size: 16px; font-weight: bold; margin-top: 15px; border-radius: 5px; }
+        
+        /* 【店員樣式更新】確定執行按鈕改為淡粉紅色 */
+        .submit-btn { width: 100%; padding: 12px; background-color: #ffccd5; color: #d66a8a; border: none; font-size: 16px; font-weight: bold; margin-top: 15px; border-radius: 5px; cursor: pointer; transition: background 0.2s; }
+        .submit-btn:hover { background-color: #f4b4c0; }
+
+        /* 自訂遮罩彈窗樣式 */
+        .custom-alert-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; }
+        .custom-alert-box { background: white; padding: 25px; border-radius: 12px; max-width: 320px; width: 100%; box-shadow: 0 4px 15px rgba(0,0,0,0.25); text-align: center; animation: popIn 0.2s ease-out; }
+        .custom-alert-text { font-size: 16px; font-weight: bold; color: #333; margin-bottom: 20px; line-height: 1.4; word-break: break-all; }
+        .custom-alert-btn { background: #ffccd5; color: #d66a8a; border: none; padding: 10px 30px; font-size: 15px; font-weight: bold; border-radius: 6px; cursor: pointer; width: 100%; box-sizing: border-box; }
+        .custom-alert-btn:hover { background: #f4b4c0; }
+        @keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
     </style>
 </head>
 <body>
@@ -244,14 +267,14 @@
     </div>
 
     <div id="staff-view" style="display:none;" class="card">
-        <h2>店家管理端後台</h2>
+        <h2>店家管理後台</h2>
         <div id="staff-status" class="status-box">權限檢查中...</div>
-        <button class="scan-btn" onclick="startScan()">📷 開啟相機 掃描會員</button>
+        <button class="scan-btn" onclick="startScan()">📷 掃描會員</button>
         
         <div id="action-panel" class="panel">
-            <div style="background:#e8f0fe; padding:8px; font-weight:bold;" id="customer-name-display">--</div>
+            <div style="background:#fff0f3; padding:8px; font-weight:bold; color: #d66a8a; border-radius: 4px;" id="customer-name-display">--</div>
             <div style="margin: 15px 0;">
-                <label style="font-weight:bold; display:block;">發放/扣除點數設定：</label>
+                <label style="font-weight:bold; display:block; margin-bottom: 5px;">發放/扣除點數：</label>
                 <div class="counter-box">
                     <button class="btn-counter" onclick="changePoints(-1)">-</button>
                     <input type="number" id="points-input" class="input-points" value="1">
@@ -269,14 +292,21 @@
                 <input type="number" id="custom-days-input" value="30" style="display:none; margin-top:5px;">
             </div>
             <div style="margin: 15px 0;">
-                <label style="font-weight:bold; display:block;">異動原因備註 (扣點必填)：</label>
+                <label style="font-weight:bold; display:block; margin-bottom: 5px;">異動備註(扣點必填)：</label>
                 <input type="text" id="remark-input" placeholder="例如：消費滿百、兌換咖啡">
             </div>
             <div style="margin: 15px 0;">
-                <label style="font-weight:bold; display:block;">管理員密碼：</label>
+                <label style="font-weight:bold; display:block; margin-bottom: 5px;">管理員密碼：</label>
                 <input type="password" id="staff-pass" placeholder="請輸入後台密碼">
             </div>
-            <button class="submit-btn" onclick="confirmSubmit()">確定執行並寫入雲端</button>
+            <button class="submit-btn" onclick="confirmSubmit()">確定</button>
+        </div>
+    </div>
+
+    <div id="custom-alert-overlay" class="custom-alert-overlay">
+        <div class="custom-alert-box">
+            <div id="alert-msg" class="custom-alert-text">提示訊息</div>
+            <button class="custom-alert-btn" onclick="closeCustomAlert()">確定</button>
         </div>
     </div>
 
