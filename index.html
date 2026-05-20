@@ -26,7 +26,7 @@
         const myLiffId = '2010135064-mXyTOHst'; 
         let targetUserId = ""; 
         let clickCount = 0; 
-        let pendingCancel = {}; // 暫存待註銷的資訊
+        let pendingCancel = {}; 
 
         window.onload = function() {
             liff.init({ liffId: myLiffId, withLoginOnExternalBrowser: true })
@@ -50,7 +50,6 @@
                 .catch(err => showCustomAlert("系統連線失敗，請重開 LINE 再試。"));
         };
 
-        // 智慧暗號判定：5下進店員、10下進老闆
         function handleTitleClick() {
             clickCount++;
             
@@ -68,17 +67,11 @@
             }
             
             if (clickCount === 10) {
-                clickCount = 0; // 重置計數
-                // 【消滅網址 1】改成呼叫網頁自訂的密碼輸入圖層，告別瀏覽器內建 prompt
+                clickCount = 0; 
                 showBossLoginModal();
             }
         }
 
-        // ==========================================
-        // 【消滅網址專用】網頁客製化彈窗與控制函式組
-        // ==========================================
-        
-        // 1. 一般提示彈窗控制 (已有的)
         function showCustomAlert(msg) {
             document.getElementById('alert-msg').innerText = msg;
             document.getElementById('custom-alert-overlay').style.display = "flex";
@@ -87,11 +80,10 @@
             document.getElementById('custom-alert-overlay').style.display = "none";
         }
 
-        // 2. 老闆娘解鎖密碼框控制 (全新的網頁內圖層)
         function showBossLoginModal() {
-            document.getElementById('boss-pass-input').value = ""; // 清空舊密碼
+            document.getElementById('boss-pass-input').value = ""; 
             document.getElementById('boss-login-overlay').style.display = "flex";
-            document.getElementById('boss-pass-input').focus(); // 自動聚焦輸入框
+            document.getElementById('boss-pass-input').focus(); 
         }
         function closeBossLoginModal() {
             document.getElementById('boss-login-overlay').style.display = "none";
@@ -104,42 +96,33 @@
                 document.getElementById('staff-view').style.display = "none";
                 document.getElementById('boss-view').style.display = "block";
                 showCustomAlert("歡迎最美老闆娘登入最高管理系統");
-                loadAllCustomers(); // 載入全店會員名冊
+                loadAllCustomers(); 
             } else {
-                closeBossLoginModal(); // 先關閉密碼框
-                setTimeout(() => { showCustomAlert("密碼錯誤，請重新解鎖。"); }, 300); // 延遲顯示錯誤，手感更好
+                closeBossLoginModal(); 
+                setTimeout(() => { showCustomAlert("密碼錯誤，請重新解鎖。"); }, 300); 
             }
         }
 
-        // 3. 老闆娘註銷確認框控制 (全新的網頁內圖層)
         function showCancelConfirmModal(uid, logId, pointsValue) {
-            // 暫存待註銷的資訊
             pendingCancel = { uid, logId, pointsValue };
-            
-            // 更新確認框文字，秀出要註銷的點數
             document.getElementById('cancel-confirm-msg').innerText = `確定要註銷這筆 [ ${pointsValue > 0 ? '+'+pointsValue : pointsValue} 點 ] 的紀錄嗎？\n系統將自動扣除該會員的總餘額！`;
             document.getElementById('cancel-confirm-overlay').style.display = "flex";
         }
         function closeCancelConfirmModal() {
             document.getElementById('cancel-confirm-overlay').style.display = "none";
-            pendingCancel = {}; // 清空暫存
+            pendingCancel = {}; 
         }
         async function executeCancelPoint() {
             if (!pendingCancel.uid || !pendingCancel.logId) return;
-            
-            closeCancelConfirmModal(); // 先關閉確認框
-            
+            closeCancelConfirmModal(); 
             try {
-                // 1. 修改該筆點數日誌狀態為已註銷
                 const logDocRef = doc(db, "users", pendingCancel.uid, "point_log", pendingCancel.logId);
                 await updateDoc(logDocRef, { status: "canceled" });
                 
-                // 2. 重新計算並校正總金額
                 const userDocRef = doc(db, "users", pendingCancel.uid);
                 const userDocSnap = await getDoc(userDocRef);
                 if (userDocSnap.exists()) {
                     let currentTotal = userDocSnap.data().totalPoints || 0;
-                    // 自動扣除對應點數 (如果是正數加點就減掉，如果是負數扣點就加回來)
                     let newTotal = currentTotal - pendingCancel.pointsValue;
                     if (newTotal < 0) newTotal = 0;
                     await updateDoc(userDocRef, { totalPoints: newTotal });
@@ -147,7 +130,7 @@
                 
                 setTimeout(() => {
                     showCustomAlert("最高權限操作成功！點數已順利註銷且餘額重算完畢。");
-                    loadAllCustomers(); // 刷新名冊
+                    loadAllCustomers(); 
                 }, 300); 
 
             } catch (e) { 
@@ -155,9 +138,6 @@
             }
         }
 
-        // ==========================================
-        // 顧客端專用核心函式
-        // ==========================================
         async function checkAndCreateUserWallet(userId, userName) {
             const pointsEl = document.getElementById('points-display');
             try {
@@ -210,9 +190,6 @@
             } catch (e) { historyListEl.innerHTML = "<li>明細載入失敗</li>"; }
         }
 
-        // ==========================================
-        // 店員端專用核心函式
-        // ==========================================
         function startScan() {
             document.getElementById('staff-status').innerText = "安全連線中，正在喚醒相機...";
             liff.scanCodeV2()
@@ -303,9 +280,6 @@
             } catch (e) { showCustomAlert("雲端寫入失敗"); }
         }
 
-        // ==========================================
-        // 大老闆端專用核心功能 
-        // ==========================================
         async function loadAllCustomers() {
             const listEl = document.getElementById('boss-customer-list');
             listEl.innerHTML = "<div style='text-align:center; padding:15px; color:#a18b8f;'>正在撈取全店會員總冊...</div>";
@@ -372,25 +346,24 @@
             } catch (e) { logListEl.innerHTML = "<li>明細加載失敗</li>"; }
         }
 
-        // 老闆娘最高管理密碼輸入框按鈕繫結
-        window.startScan = startScan; 
-        window.changePoints = changePoints; 
-        window.setExpireDays = setExpireDays; 
-        window.confirmSubmit = confirmSubmit; 
-        window.closeCustomAlert = closeCustomAlert; 
-        window.handleTitleClick = handleTitleClick; 
-        window.loadAllCustomers = loadAllCustomers;
-        window.closeBossLoginModal = closeBossLoginModal;
-        window.confirmBossLogin = confirmBossLogin;
-        window.showCancelConfirmModal = showCancelConfirmModal;
-        window.closeCancelConfirmModal = closeCancelConfirmModal;
-        window.executeCancelPoint = executeCancelPoint;
+        window.startScan = startScan; window.changePoints = changePoints; window.setExpireDays = setExpireDays; window.confirmSubmit = confirmSubmit; window.closeCustomAlert = closeCustomAlert; window.handleTitleClick = handleTitleClick; window.loadAllCustomers = loadAllCustomers; window.closeBossLoginModal = closeBossLoginModal; window.confirmBossLogin = confirmBossLogin; window.showCancelConfirmModal = showCancelConfirmModal; window.closeCancelConfirmModal = closeCancelConfirmModal; window.executeCancelPoint = executeCancelPoint;
     </script>
 
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center; background-color: #fffbfc; padding: 15px 10px; color: #5c4d50; }
+        /* 【黃金修正】改用精準的觸控手勢設定，不鎖死手動放大，但完美消滅連點的干擾 */
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            text-align: center; 
+            background-color: #fffbfc; 
+            padding: 15px 10px; 
+            color: #5c4d50;
+            touch-action: manipulation; /* 核心：僅全面拔除 iOS 的「連點自動放大」，保留手動雙指縮放功能 */
+        }
+        
         .card { background-color: #fff5f6; border-radius: 16px; padding: 24px; width: 95%; max-width: 360px; margin: 0 auto 20px auto; box-shadow: 0 4px 20px rgba(240, 210, 215, 0.25); box-sizing: border-box; }
-        h1, h2, h3 { color: #c97288; font-size: 24px; margin: 5px 0; font-weight: bold; user-select: none; -webkit-user-select: none; }
+        
+        h1, h2, h3 { color: #c97288; font-size: 24px; margin: 5px 0; font-weight: bold; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+        
         .user-name { font-size: 18px; font-weight: bold; margin: 12px 0; color: #6e5b5e; }
         .points-section { background-color: white; border: 2px dashed #fcdce2; border-radius: 12px; padding: 12px; margin: 18px 0; }
         .points-num { font-size: 46px; font-weight: bold; color: #c97288; }
@@ -414,12 +387,23 @@
         .radio-btn { background: white; border: 1px solid #fcdce2; padding: 8px 12px; border-radius: 6px; font-size: 13px; color: #8a7377; cursor: pointer; }
         .radio-btn input { display: none; }
         .radio-btn:has(input:checked) { background: #ffeef0; color: #c97288; border-color: #fcdce2; font-weight: bold; }
-        input[type="text"], input[type="password"], input[type="number"] { width: 100%; padding: 12px; border: 1px solid #fcdce2; border-radius: 8px; box-sizing: border-box; background-color: white; color: #5c4d50; }
+        
+        /* 確保字體維持 16px 阻斷 iPhone 的打字放大拉近行為 */
+        input[type="text"], input[type="password"], input[type="number"] { 
+            width: 100%; 
+            padding: 12px; 
+            border: 1px solid #fcdce2; 
+            border-radius: 8px; 
+            box-sizing: border-box; 
+            background-color: white; 
+            color: #5c4d50; 
+            font-size: 16px; 
+        }
         input:focus { outline: none; border-color: #c97288; }
+        
         .submit-btn { width: 100%; padding: 14px; background-color: #ffeef0; color: #c97288; border: none; font-size: 16px; font-weight: bold; margin-top: 15px; border-radius: 10px; cursor: pointer; transition: background 0.2s; box-shadow: 0 2px 6px rgba(240, 210, 215, 0.15); }
         .submit-btn:hover { background-color: #ffd9e0; }
         
-        /* 大老闆管理介面專用美化樣式 */
         .customer-list-container { text-align: left; margin-top: 15px; max-height: 420px; overflow-y: auto; padding-right: 4px; }
         .customer-item { background: white; border: 1px solid #fcdce2; border-radius: 10px; margin-bottom: 10px; padding: 12px; box-shadow: 0 2px 6px rgba(240,210,215,0.1); }
         .customer-info-row { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
@@ -429,18 +413,12 @@
         .cancel-point-btn { background: #fff0f2; color: #d9534f; border: 1px solid #fcdce2; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
         .cancel-point-btn:hover { background: #d9534f; color: white; border-color: #d9534f; }
 
-        /* ==========================================
-           【全新/更新加入】客製化彈窗總樣式 (徹底消滅網址抬頭)
-           ========================================== */
-        
-        /* 1. 一般提示彈窗 (已有的，微調美化) */
         .custom-alert-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; }
         .custom-alert-box { background: white; padding: 25px; border-radius: 16px; max-width: 320px; width: 100%; box-shadow: 0 4px 15px rgba(0,0,0,0.25); text-align: center; animation: popIn 0.2s ease-out; }
         .custom-alert-text { font-size: 16px; font-weight: bold; color: #5c4d50; margin-bottom: 20px; line-height: 1.4; word-break: break-all; }
         .custom-alert-btn { background: #ffeef0; color: #c97288; border: none; padding: 11px 30px; font-size: 15px; font-weight: bold; border-radius: 8px; cursor: pointer; width: 100%; box-sizing: border-box; }
         .custom-alert-btn:hover { background: #ffd9e0; }
         
-        /* 2. 老闆娘解鎖/註銷確認用 - 高階彈窗樣式 */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 10000; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; backdrop-filter: blur(2px); }
         .modal-box { background: white; padding: 25px 20px; border-radius: 16px; max-width: 330px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.3); text-align: center; animation: popIn 0.3s ease-out; }
         .modal-title { font-size: 18px; font-weight: bold; color: #c97288; margin-bottom: 15px; }
@@ -533,7 +511,7 @@
         <div class="modal-box">
             <div class="modal-title">認證確認</div>
             <div class="modal-text">請輸入最美老闆娘專用最高權限密碼：</div>
-            <input type="password" id="boss-pass-input" placeholder="請輸入專屬驗證碼" style="margin-bottom: 10px;">
+            <input type="password" id="boss-pass-input" placeholder="請輸入專屬驗證碼" style="margin-bottom: 15px;">
             <div class="modal-btn-row">
                 <button class="modal-btn-cancel" onclick="closeBossLoginModal()">取消</button>
                 <button class="modal-btn-confirm" onclick="confirmBossLogin()">解鎖系統</button>
