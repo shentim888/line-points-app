@@ -25,7 +25,8 @@
 
         const myLiffId = '2010135064-mXyTOHst'; 
         let targetUserId = ""; 
-        let clickCount = 0; 
+        let customerClickCount = 0; // 顧客端點擊計數
+        let staffClickCount = 0;    // 店員端點擊計數
         let pendingCancel = {}; 
 
         window.onload = function() {
@@ -50,26 +51,28 @@
                 .catch(err => showCustomAlert("系統連線失敗，請重開 LINE 再試。"));
         };
 
-        function handleTitleClick() {
-            clickCount++;
-            
-            if (clickCount === 5) {
-                setTimeout(() => {
-                    if (clickCount >= 5 && clickCount < 10) {
-                        document.getElementById('customer-view').style.display = "none";
-                        document.getElementById('boss-view').style.display = "none";
-                        document.getElementById('staff-view').style.display = "block";
-                        document.getElementById('staff-status').innerText = "管理員就緒。最高相機權限已順利解鎖。";
-                        clickCount = 0;
-                        showCustomAlert("已成功切換至店家管理後台");
-                    }
-                }, 1500); 
+        // 【階梯分流第一層】顧客端點 5 下 ➡️ 切換到店員收銀台
+        function handleCustomerTitleClick() {
+            customerClickCount++;
+            if (customerClickCount === 5) {
+                customerClickCount = 0; // 重置計數
+                document.getElementById('customer-view').style.display = "none";
+                document.getElementById('boss-view').style.display = "none";
+                document.getElementById('staff-view').style.display = "block";
+                document.getElementById('staff-status').innerText = "管理員就緒。最高相機權限已順利解鎖。";
+                showCustomAlert("已成功切換至店家管理後台");
             }
-            
-            if (clickCount === 10) {
-                clickCount = 0; 
-                showBossLoginModal();
+            setTimeout(() => { customerClickCount = 0; }, 3000); // 3秒防呆重置
+        }
+
+        // 【階梯分流第二層】店員端再點 5 下 ➡️ 觸發老闆娘密碼框
+        function handleStaffTitleClick() {
+            staffClickCount++;
+            if (staffClickCount === 5) {
+                staffClickCount = 0; // 重置計數
+                showBossLoginModal(); // 彈出老闆娘密碼輸入圖層
             }
+            setTimeout(() => { staffClickCount = 0; }, 3000); // 3秒防呆重置
         }
 
         function showCustomAlert(msg) {
@@ -346,24 +349,33 @@
             } catch (e) { logListEl.innerHTML = "<li>明細加載失敗</li>"; }
         }
 
-        window.startScan = startScan; window.changePoints = changePoints; window.setExpireDays = setExpireDays; window.confirmSubmit = confirmSubmit; window.closeCustomAlert = closeCustomAlert; window.handleTitleClick = handleTitleClick; window.loadAllCustomers = loadAllCustomers; window.closeBossLoginModal = closeBossLoginModal; window.confirmBossLogin = confirmBossLogin; window.showCancelConfirmModal = showCancelConfirmModal; window.closeCancelConfirmModal = closeCancelConfirmModal; window.executeCancelPoint = executeCancelPoint;
+        window.cancelSinglePoint = async function(uid, logId, pointsValue) {
+            if (!confirm(`確定要註銷這筆 [ ${pointsValue > 0 ? '+'+pointsValue : pointsValue} 點 ] 的紀錄嗎？系統將會自動重算並扣除該會員的總餘額！`)) return;
+            try {
+                const logDocRef = doc(db, "users", uid, "point_log", logId);
+                await updateDoc(logDocRef, { status: "canceled" });
+                
+                const userDocRef = doc(db, "users", uid);
+                const userDocSnap = await getDoc(userDocRef);
+                if (userDocSnap.exists()) {
+                    let currentTotal = userDocSnap.data().totalPoints || 0;
+                    let newTotal = currentTotal - pointsValue;
+                    if (newTotal < 0) newTotal = 0;
+                    await updateDoc(userDocRef, { totalPoints: newTotal });
+                }
+                
+                showCustomAlert("操作成功！點數已註銷且餘額重算。");
+                loadAllCustomers(); 
+            } catch (e) { showCustomAlert("最高權限寫入失敗: " + e); }
+        }
+
+        window.startScan = startScan; window.changePoints = changePoints; window.setExpireDays = setExpireDays; window.confirmSubmit = confirmSubmit; window.closeCustomAlert = closeCustomAlert; window.handleCustomerTitleClick = handleCustomerTitleClick; window.handleStaffTitleClick = handleStaffTitleClick; window.loadAllCustomers = loadAllCustomers; window.closeBossLoginModal = closeBossLoginModal; window.confirmBossLogin = confirmBossLogin; window.showCancelConfirmModal = showCancelConfirmModal; window.closeCancelConfirmModal = closeCancelConfirmModal; window.executeCancelPoint = executeCancelPoint;
     </script>
 
     <style>
-        /* 【黃金修正】改用精準的觸控手勢設定，不鎖死手動放大，但完美消滅連點的干擾 */
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-            text-align: center; 
-            background-color: #fffbfc; 
-            padding: 15px 10px; 
-            color: #5c4d50;
-            touch-action: manipulation; /* 核心：僅全面拔除 iOS 的「連點自動放大」，保留手動雙指縮放功能 */
-        }
-        
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center; background-color: #fffbfc; padding: 15px 10px; color: #5c4d50; touch-action: manipulation; }
         .card { background-color: #fff5f6; border-radius: 16px; padding: 24px; width: 95%; max-width: 360px; margin: 0 auto 20px auto; box-shadow: 0 4px 20px rgba(240, 210, 215, 0.25); box-sizing: border-box; }
-        
         h1, h2, h3 { color: #c97288; font-size: 24px; margin: 5px 0; font-weight: bold; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
-        
         .user-name { font-size: 18px; font-weight: bold; margin: 12px 0; color: #6e5b5e; }
         .points-section { background-color: white; border: 2px dashed #fcdce2; border-radius: 12px; padding: 12px; margin: 18px 0; }
         .points-num { font-size: 46px; font-weight: bold; color: #c97288; }
@@ -388,7 +400,6 @@
         .radio-btn input { display: none; }
         .radio-btn:has(input:checked) { background: #ffeef0; color: #c97288; border-color: #fcdce2; font-weight: bold; }
         
-        /* 確保字體維持 16px 阻斷 iPhone 的打字放大拉近行為 */
         input[type="text"], input[type="password"], input[type="number"] { 
             width: 100%; 
             padding: 12px; 
@@ -438,7 +449,7 @@
 
     <div id="customer-view" style="display:none;">
         <div class="card">
-            <h1 onclick="handleTitleClick()" style="cursor: pointer;">集點卡</h1>
+            <h1 onclick="handleCustomerTitleClick()" style="cursor: pointer;">集點卡</h1>
             <div id="username" class="user-name loading">正在載入您的 LINE 資訊...</div>
             <div class="points-section">
                 <p style="margin:0; color:#8a7377; font-size: 14px;">目前可用總點數</p>
@@ -454,7 +465,7 @@
     </div>
 
     <div id="staff-view" style="display:none;" class="card">
-        <h2>店家管理後台</h2>
+        <h2 onclick="handleStaffTitleClick()" style="cursor: pointer;">店家管理後台</h2>
         <div id="staff-status" class="status-box">權限檢查中...</div>
         <button class="scan-btn" onclick="startScan()">📷 掃描會員</button>
         
@@ -486,7 +497,9 @@
                 <label style="font-weight:bold; display:block; margin-bottom: 8px;">管理員密碼：</label>
                 <input type="password" id="staff-pass" placeholder="請輸入後台密碼">
             </div>
-            <button class="submit-btn" onclick="confirmSubmit()">確定</button>
+            <div style="margin-top: 15px;">
+                <button class="submit-btn" onclick="confirmSubmit()">確定</button>
+            </div>
         </div>
     </div>
 
@@ -511,7 +524,7 @@
         <div class="modal-box">
             <div class="modal-title">輸入密碼</div>
             <div class="modal-text">請輸入最美老闆娘專用密碼：</div>
-ut type="password" id="boss-pass-input" placeholder="" style="margin-bottom: 15px;">            <inp
+            <input type="password" id="boss-pass-input" placeholder="請輸入安全驗證碼" style="margin-bottom: 15px;">
             <div class="modal-btn-row">
                 <button class="modal-btn-cancel" onclick="closeBossLoginModal()">取消</button>
                 <button class="modal-btn-confirm" onclick="confirmBossLogin()">解鎖系統</button>
