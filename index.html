@@ -26,6 +26,7 @@
         const myLiffId = '2010135064-mXyTOHst'; 
         let targetUserId = ""; 
         let clickCount = 0; 
+        let pendingCancel = {}; // 暫存待註銷的資訊
 
         window.onload = function() {
             liff.init({ liffId: myLiffId, withLoginOnExternalBrowser: true })
@@ -46,7 +47,7 @@
                         });
                     }
                 })
-                .catch(err => showCustomAlert("系統初始化失敗: " + err));
+                .catch(err => showCustomAlert("系統連線失敗，請重開 LINE 再試。"));
         };
 
         // 智慧暗號判定：5下進店員、10下進老闆
@@ -67,27 +68,91 @@
             }
             
             if (clickCount === 10) {
-                const bossPass = prompt("請輸入最美老闆娘密碼：");
-                if (bossPass === "0412888") {
-                    document.getElementById('customer-view').style.display = "none";
-                    document.getElementById('staff-view').style.display = "none";
-                    document.getElementById('boss-view').style.display = "block";
-                    clickCount = 0;
-                    showCustomAlert("解鎖成功！歡迎來到老闆娘專用管理系統");
-                    loadAllCustomers(); 
-                } else {
-                    showCustomAlert("密碼錯誤，拒絕存取最美老闆娘最高權限！");
-                    clickCount = 0;
-                }
+                clickCount = 0; // 重置計數
+                // 【消滅網址 1】改成呼叫網頁自訂的密碼輸入圖層，告別瀏覽器內建 prompt
+                showBossLoginModal();
             }
         }
 
+        // ==========================================
+        // 【消滅網址專用】網頁客製化彈窗與控制函式組
+        // ==========================================
+        
+        // 1. 一般提示彈窗控制 (已有的)
         function showCustomAlert(msg) {
             document.getElementById('alert-msg').innerText = msg;
             document.getElementById('custom-alert-overlay').style.display = "flex";
         }
         function closeCustomAlert() {
             document.getElementById('custom-alert-overlay').style.display = "none";
+        }
+
+        // 2. 老闆娘解鎖密碼框控制 (全新的網頁內圖層)
+        function showBossLoginModal() {
+            document.getElementById('boss-pass-input').value = ""; // 清空舊密碼
+            document.getElementById('boss-login-overlay').style.display = "flex";
+            document.getElementById('boss-pass-input').focus(); // 自動聚焦輸入框
+        }
+        function closeBossLoginModal() {
+            document.getElementById('boss-login-overlay').style.display = "none";
+        }
+        function confirmBossLogin() {
+            const bossPass = document.getElementById('boss-pass-input').value;
+            if (bossPass === "0412888") {
+                closeBossLoginModal();
+                document.getElementById('customer-view').style.display = "none";
+                document.getElementById('staff-view').style.display = "none";
+                document.getElementById('boss-view').style.display = "block";
+                showCustomAlert("歡迎最美老闆娘登入最高管理系統");
+                loadAllCustomers(); // 載入全店會員名冊
+            } else {
+                closeBossLoginModal(); // 先關閉密碼框
+                setTimeout(() => { showCustomAlert("密碼錯誤，請重新解鎖。"); }, 300); // 延遲顯示錯誤，手感更好
+            }
+        }
+
+        // 3. 老闆娘註銷確認框控制 (全新的網頁內圖層)
+        function showCancelConfirmModal(uid, logId, pointsValue) {
+            // 暫存待註銷的資訊
+            pendingCancel = { uid, logId, pointsValue };
+            
+            // 更新確認框文字，秀出要註銷的點數
+            document.getElementById('cancel-confirm-msg').innerText = `確定要註銷這筆 [ ${pointsValue > 0 ? '+'+pointsValue : pointsValue} 點 ] 的紀錄嗎？\n系統將自動扣除該會員的總餘額！`;
+            document.getElementById('cancel-confirm-overlay').style.display = "flex";
+        }
+        function closeCancelConfirmModal() {
+            document.getElementById('cancel-confirm-overlay').style.display = "none";
+            pendingCancel = {}; // 清空暫存
+        }
+        async function executeCancelPoint() {
+            if (!pendingCancel.uid || !pendingCancel.logId) return;
+            
+            closeCancelConfirmModal(); // 先關閉確認框
+            
+            try {
+                // 1. 修改該筆點數日誌狀態為已註銷
+                const logDocRef = doc(db, "users", pendingCancel.uid, "point_log", pendingCancel.logId);
+                await updateDoc(logDocRef, { status: "canceled" });
+                
+                // 2. 重新計算並校正總金額
+                const userDocRef = doc(db, "users", pendingCancel.uid);
+                const userDocSnap = await getDoc(userDocRef);
+                if (userDocSnap.exists()) {
+                    let currentTotal = userDocSnap.data().totalPoints || 0;
+                    // 自動扣除對應點數 (如果是正數加點就減掉，如果是負數扣點就加回來)
+                    let newTotal = currentTotal - pendingCancel.pointsValue;
+                    if (newTotal < 0) newTotal = 0;
+                    await updateDoc(userDocRef, { totalPoints: newTotal });
+                }
+                
+                setTimeout(() => {
+                    showCustomAlert("最高權限操作成功！點數已順利註銷且餘額重算完畢。");
+                    loadAllCustomers(); // 刷新名冊
+                }, 300); 
+
+            } catch (e) { 
+                setTimeout(() => { showCustomAlert("最高權限寫入失敗，請重試。"); }, 300);
+            }
         }
 
         // ==========================================
@@ -149,13 +214,13 @@
         // 店員端專用核心函式
         // ==========================================
         function startScan() {
-            document.getElementById('staff-status').innerText = "安全連線中，正喚醒相機...";
+            document.getElementById('staff-status').innerText = "安全連線中，正在喚醒相機...";
             liff.scanCodeV2()
                 .then(result => {
                     if (result && result.value) {
                         targetUserId = result.value;
                         document.getElementById('action-panel').style.display = "block";
-                        document.getElementById('staff-status').innerText = "掃描成功！開始會員點數設定。";
+                        document.getElementById('staff-status').innerText = "掃描成功！已載入會員面板。";
                         fetchCustomerInfo(targetUserId);
                     }
                 })
@@ -247,7 +312,7 @@
             try {
                 const userRef = collection(db, "users");
                 const querySnapshot = await getDocs(userRef);
-                if (querySnapshot.empty) { listEl.innerHTML = "<p>目前店內尚無任何會員註冊。</p>"; return; }
+                if (querySnapshot.empty) { listEl.innerHTML = "<p style='text-align:center; padding:20px;'>目前店內尚無任何會員註冊。</p>"; return; }
                 
                 let html = "";
                 querySnapshot.forEach((docSnap) => {
@@ -298,34 +363,28 @@
                                 <strong style="color:${data.pointsObtained > 0 ? '#c97288':'#8a7377'}">${pointStr} 點</strong> [${data.status}]<br>
                                 <small style="color:#a18b8f;">${data.remark || '無備註'} (${new Date(data.obtainedAt).toLocaleDateString()})</small>
                             </div>
-                            ${!isCanceled ? `<button class="cancel-point-btn" onclick="cancelSinglePoint('${uid}', '${logId}', ${data.pointsObtained})">註銷此筆</button>` : '<span style="font-size:12px; color:#a18b8f;">已註銷</span>'}
+                            ${!isCanceled ? `
+                                <button class="cancel-point-btn" onclick="showCancelConfirmModal('${uid}', '${logId}', ${data.pointsObtained})">註銷此筆</button>
+                            ` : '<span style="font-size:12px; color:#a18b8f;">已註銷</span>'}
                         </li>`;
                 });
                 logListEl.innerHTML = html;
             } catch (e) { logListEl.innerHTML = "<li>明細加載失敗</li>"; }
         }
 
-        window.cancelSinglePoint = async function(uid, logId, pointsValue) {
-            if (!confirm(`確定要註銷這筆 [ ${pointsValue > 0 ? '+'+pointsValue : pointsValue} 點 ] 的紀錄嗎？系統將會自動重算並扣除該會員的總餘額！`)) return;
-            try {
-                const logDocRef = doc(db, "users", uid, "point_log", logId);
-                await updateDoc(logDocRef, { status: "canceled" });
-                
-                const userDocRef = doc(db, "users", uid);
-                const userDocSnap = await getDoc(userDocRef);
-                if (userDocSnap.exists()) {
-                    let currentTotal = userDocSnap.data().totalPoints || 0;
-                    let newTotal = currentTotal - pointsValue;
-                    if (newTotal < 0) newTotal = 0;
-                    await updateDoc(userDocRef, { totalPoints: newTotal });
-                }
-                
-                showCustomAlert("操作成功！點數已註銷且餘額重算。");
-                loadAllCustomers(); // 【自動校正體驗】註銷後自動刷新列表，數字才會即時更新
-            } catch (e) { showCustomAlert("最高權限寫入失敗: " + e); }
-        }
-
-        window.startScan = startScan; window.changePoints = changePoints; window.setExpireDays = setExpireDays; window.confirmSubmit = confirmSubmit; window.closeCustomAlert = closeCustomAlert; window.handleTitleClick = handleTitleClick; window.loadAllCustomers = loadAllCustomers;
+        // 老闆娘最高管理密碼輸入框按鈕繫結
+        window.startScan = startScan; 
+        window.changePoints = changePoints; 
+        window.setExpireDays = setExpireDays; 
+        window.confirmSubmit = confirmSubmit; 
+        window.closeCustomAlert = closeCustomAlert; 
+        window.handleTitleClick = handleTitleClick; 
+        window.loadAllCustomers = loadAllCustomers;
+        window.closeBossLoginModal = closeBossLoginModal;
+        window.confirmBossLogin = confirmBossLogin;
+        window.showCancelConfirmModal = showCancelConfirmModal;
+        window.closeCancelConfirmModal = closeCancelConfirmModal;
+        window.executeCancelPoint = executeCancelPoint;
     </script>
 
     <style>
@@ -360,6 +419,7 @@
         .submit-btn { width: 100%; padding: 14px; background-color: #ffeef0; color: #c97288; border: none; font-size: 16px; font-weight: bold; margin-top: 15px; border-radius: 10px; cursor: pointer; transition: background 0.2s; box-shadow: 0 2px 6px rgba(240, 210, 215, 0.15); }
         .submit-btn:hover { background-color: #ffd9e0; }
         
+        /* 大老闆管理介面專用美化樣式 */
         .customer-list-container { text-align: left; margin-top: 15px; max-height: 420px; overflow-y: auto; padding-right: 4px; }
         .customer-item { background: white; border: 1px solid #fcdce2; border-radius: 10px; margin-bottom: 10px; padding: 12px; box-shadow: 0 2px 6px rgba(240,210,215,0.1); }
         .customer-info-row { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
@@ -369,12 +429,31 @@
         .cancel-point-btn { background: #fff0f2; color: #d9534f; border: 1px solid #fcdce2; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
         .cancel-point-btn:hover { background: #d9534f; color: white; border-color: #d9534f; }
 
-        .custom-alert-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); z-index: 9999; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; }
-        .custom-alert-box { background: white; padding: 25px; border-radius: 16px; max-width: 320px; width: 100%; box-shadow: 0 10px 30px rgba(240, 210, 215, 0.3); text-align: center; animation: popIn 0.2s ease-out; }
-        .custom-alert-text { font-size: 16px; font-weight: bold; color: #5c4d50; margin-bottom: 20px; line-height: 1.4; }
+        /* ==========================================
+           【全新/更新加入】客製化彈窗總樣式 (徹底消滅網址抬頭)
+           ========================================== */
+        
+        /* 1. 一般提示彈窗 (已有的，微調美化) */
+        .custom-alert-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; }
+        .custom-alert-box { background: white; padding: 25px; border-radius: 16px; max-width: 320px; width: 100%; box-shadow: 0 4px 15px rgba(0,0,0,0.25); text-align: center; animation: popIn 0.2s ease-out; }
+        .custom-alert-text { font-size: 16px; font-weight: bold; color: #5c4d50; margin-bottom: 20px; line-height: 1.4; word-break: break-all; }
         .custom-alert-btn { background: #ffeef0; color: #c97288; border: none; padding: 11px 30px; font-size: 15px; font-weight: bold; border-radius: 8px; cursor: pointer; width: 100%; box-sizing: border-box; }
         .custom-alert-btn:hover { background: #ffd9e0; }
-        @keyframes popIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        
+        /* 2. 老闆娘解鎖/註銷確認用 - 高階彈窗樣式 */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 10000; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; backdrop-filter: blur(2px); }
+        .modal-box { background: white; padding: 25px 20px; border-radius: 16px; max-width: 330px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.3); text-align: center; animation: popIn 0.3s ease-out; }
+        .modal-title { font-size: 18px; font-weight: bold; color: #c97288; margin-bottom: 15px; }
+        .modal-text { font-size: 14px; color: #6e5b5e; margin-bottom: 20px; line-height: 1.6; }
+        .modal-btn-row { display: flex; gap: 10px; margin-top: 15px; }
+        
+        .modal-btn-cancel { flex: 1; background: #fff; color: #a18b8f; border: 1px solid #fcdce2; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; }
+        .modal-btn-cancel:hover { background: #fffcfc; }
+        
+        .modal-btn-confirm { flex: 1; background: #ffeef0; color: #c97288; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; }
+        .modal-btn-confirm:hover { background: #ffd9e0; }
+        
+        @keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
     </style>
 </head>
 <body>
@@ -447,6 +526,29 @@
         <div class="custom-alert-box">
             <div id="alert-msg" class="custom-alert-text">提示訊息</div>
             <button class="custom-alert-btn" onclick="closeCustomAlert()">確定</button>
+        </div>
+    </div>
+
+    <div id="boss-login-overlay" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-title">認證確認</div>
+            <div class="modal-text">請輸入最美老闆娘專用最高權限密碼：</div>
+            <input type="password" id="boss-pass-input" placeholder="請輸入專屬驗證碼" style="margin-bottom: 10px;">
+            <div class="modal-btn-row">
+                <button class="modal-btn-cancel" onclick="closeBossLoginModal()">取消</button>
+                <button class="modal-btn-confirm" onclick="confirmBossLogin()">解鎖系統</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="cancel-confirm-overlay" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-title">最高權限操作</div>
+            <div id="cancel-confirm-msg" class="modal-text">確定要註銷這筆紀錄嗎？</div>
+            <div class="modal-btn-row">
+                <button class="modal-btn-cancel" onclick="closeCancelConfirmModal()">拒絕</button>
+                <button class="modal-btn-confirm" onclick="executeCancelPoint()">確定註銷</button>
+            </div>
         </div>
     </div>
 
