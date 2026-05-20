@@ -3,16 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>會員數位集點卡</title>
+    <title>會員集點系統</title>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // 已自動代入專屬 Firebase 金鑰
         const firebaseConfig = {
             apiKey: "AIzaSyAqsN1y3eNHtQ4PiYpWIuxZC8eN6o0bK24",
             authDomain: "line-loyalty-card.firebaseapp.com",
@@ -25,155 +23,261 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // 已自動代入第一個（顧客端）LINE LIFF ID
+        // 統一使用第一個官方認證的最基礎 LIFF ID
         const myLiffId = '2010135064-mXyTOHst'; 
+        let targetUserId = ""; // 店員端掃描到的客人UID
 
         window.onload = function() {
-            liff.init({ liffId: myLiffId })
+            liff.init({ liffId: myLiffId, withLoginOnExternalBrowser: true })
                 .then(() => {
                     if (!liff.isLoggedIn()) {
                         liff.login();
                     } else {
-                        liff.getProfile()
-                            .then(profile => {
-                                const userId = profile.userId; 
-                                const userName = profile.displayName; 
+                        // 【關鍵分流邏輯】檢查網址後面有沒有帶店員暗號 "?mode=staff"
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const isStaff = urlParams.get('mode') === 'staff';
 
-                                document.getElementById('username').innerText = "嗨！ " + userName;
+                        if (isStaff) {
+                            // 顯示店員畫面，隱藏顧客畫面
+                            document.getElementById('customer-view').style.display = "none";
+                            document.getElementById('staff-view').style.display = "block";
+                            document.getElementById('staff-status').innerText = "管理員就緒。網域安全檢查通過。";
+                        } else {
+                            // 顯示顧客畫面
+                            document.getElementById('customer-view').style.display = "block";
+                            document.getElementById('staff-view').style.display = "none";
+                            
+                            liff.getProfile().then(profile => {
+                                document.getElementById('username').innerText = "嗨！ " + profile.displayName;
                                 document.getElementById('username').classList.remove('loading');
-
-                                checkAndCreateUserWallet(userId, userName);
-                                generateMemberQRCode(userId);
-                                loadPointHistory(userId);
-                            })
-                            .catch(err => console.error('抓取 LINE 失敗', err));
+                                checkAndCreateUserWallet(profile.userId, profile.displayName);
+                                generateMemberQRCode(profile.userId);
+                                loadPointHistory(profile.userId);
+                            });
+                        }
                     }
                 })
-                .catch(err => {
-                    document.getElementById('username').innerText = "系統初始化失敗";
-                });
+                .catch(err => alert("系統初始化失敗: " + err));
         };
 
-        // 檢查開戶
+        // ==========================================
+        // 顧客端專用核心函式
+        // ==========================================
         async function checkAndCreateUserWallet(userId, userName) {
             const pointsEl = document.getElementById('points-display');
             try {
                 const userDocRef = doc(db, "users", userId);
                 const userDocSnap = await getDoc(userDocRef);
-
                 if (userDocSnap.exists()) {
                     pointsEl.innerText = userDocSnap.data().totalPoints || 0;
                 } else {
-                    await setDoc(userDocRef, {
-                        lineName: userName,
-                        totalPoints: 0,
-                        createdAt: new Date().toISOString()
-                    });
+                    await setDoc(userDocRef, { lineName: userName, totalPoints: 0, createdAt: new Date().toISOString() });
                     pointsEl.innerText = 0;
                 }
-            } catch (error) {
-                console.error(error);
-            }
+            } catch (e) { console.error(e); }
         }
 
-        // 生成會員 QR Code
         function generateMemberQRCode(userId) {
             document.getElementById("qrcode").innerHTML = "";
-            new QRCode(document.getElementById("qrcode"), {
-                text: userId,         
-                width: 180,           
-                height: 180,          
-                colorDark : "#000000",
-                colorLight : "#ffffff",
-                correctLevel : QRCode.CorrectLevel.H
-            });
+            new QRCode(document.getElementById("qrcode"), { text: userId, width: 180, height: 180 });
         }
 
-        // 載入點數明細
         async function loadPointHistory(userId) {
             const historyListEl = document.getElementById('history-list');
-            historyListEl.innerHTML = "<li>明細載入中...</li>";
-
             try {
                 const logRef = collection(db, "users", userId, "point_log");
                 const q = query(logRef, orderBy("obtainedAt", "desc"));
                 const querySnapshot = await getDocs(q);
-
-                if (querySnapshot.empty) {
-                    historyListEl.innerHTML = "<li>目前尚無點數歷史紀錄</li>";
-                    return;
-                }
-
+                if (querySnapshot.empty) { historyListEl.innerHTML = "<li>目前尚無點數歷史紀錄</li>"; return; }
                 let htmlContent = "";
                 querySnapshot.forEach((docSnap) => {
                     const data = docSnap.data();
-                    const obtainedDate = new Date(data.obtainedAt).toLocaleDateString();
-                    const expiredDate = new Date(data.expiredAt).toLocaleDateString();
-                    
                     let statusTxt = "有效";
                     if (data.status === "used") statusTxt = "已使用";
-                    if (data.status === "canceled") statusTxt = "已註銷(發錯扣回)";
-                    
-                    if (data.status === "valid" && new Date() > new Date(data.expiredAt)) {
-                        statusTxt = "已過期";
-                    }
-
+                    if (data.status === "canceled") statusTxt = "已註銷";
+                    if (data.status === "valid" && new Date() > new Date(data.expiredAt)) statusTxt = "已過期";
                     let pointStr = data.pointsObtained > 0 ? `+${data.pointsObtained}` : `${data.pointsObtained}`;
-                    let remarkStr = data.remark ? ` (${data.remark})` : "";
-
-                    htmlContent += `
-                        <li>
-                            <strong>${pointStr} 點</strong> - ${statusTxt}${remarkStr}<br>
-                            <small>發放日: ${obtainedDate} | 到期日: ${expiredDate}</small>
-                        </li>
-                    `;
+                    htmlContent += `<li><strong>${pointStr} 點</strong> - ${statusTxt}${data.remark ? ' ('+data.remark+')' : ''}<br><small>發放日: ${new Date(data.obtainedAt).toLocaleDateString()} | 到期日: ${new Date(data.expiredAt).toLocaleDateString()}</small></li>`;
                 });
                 historyListEl.innerHTML = htmlContent;
-
-            } catch (error) {
-                console.error("載入明細失敗:", error);
-                historyListEl.innerHTML = "<li>無法載入明細，請重新整理</li>";
-            }
+            } catch (e) { historyListEl.innerHTML = "<li>明細載入失敗</li>"; }
         }
+
+        // ==========================================
+        // 店員端專用核心函式 (解鎖相機)
+        // ==========================================
+        function startScan() {
+            document.getElementById('staff-status').innerText = "安全連線中，正在喚醒相機...";
+            liff.scanCodeV2()
+                .then(result => {
+                    if (result && result.value) {
+                        targetUserId = result.value;
+                        document.getElementById('action-panel').style.display = "block";
+                        document.getElementById('staff-status').innerText = "掃描成功！已載入會員面板。";
+                        fetchCustomerInfo(targetUserId);
+                    }
+                })
+                .catch(err => {
+                    alert("相機喚醒失敗，請確認是否允許 LINE 相機權限。錯誤訊號: " + JSON.stringify(err));
+                });
+        }
+
+        async function fetchCustomerInfo(uid) {
+            try {
+                const userDocRef = doc(db, "users", uid);
+                const userDocSnap = await getDoc(userDocRef);
+                if (userDocSnap.exists()) {
+                    document.getElementById('customer-name-display').innerText = `${userDocSnap.data().lineName} (餘額: ${userDocSnap.data().totalPoints || 0} 點)`;
+                } else {
+                    document.getElementById('customer-name-display').innerText = "未開戶新客";
+                }
+            } catch (e) { document.getElementById('customer-name-display').innerText = "讀取失敗"; }
+        }
+
+        function changePoints(amount) {
+            const input = document.getElementById('points-input');
+            let next = (parseInt(input.value) || 0) + amount;
+            input.value = next;
+            document.getElementById('expiry-group').style.display = next < 0 ? "none" : "block";
+        }
+
+        function setExpireDays(days) {
+            document.getElementById('custom-days-input').style.display = days === 'custom' ? "block" : "none";
+            document.getElementById('custom-days-input').value = days === 'custom' ? "30" : days;
+        }
+
+        async function confirmSubmit() {
+            const pointsChange = parseInt(document.getElementById('points-input').value);
+            const remark = document.getElementById('remark-input').value.trim();
+            if (pointsChange === 0) { alert("點數不能為 0"); return; }
+            if (document.getElementById('staff-pass').value !== "1234") { alert("密碼錯誤！"); return; }
+            if (pointsChange < 0 && !remark) { alert("扣點時，必須填寫備註原因！"); return; }
+
+            try {
+                const userDocRef = doc(db, "users", targetUserId);
+                const userDocSnap = await getDoc(userDocRef);
+                let currentPoints = userDocSnap.exists() ? (userDocSnap.data().totalPoints || 0) : 0;
+                if (pointsChange < 0 && (currentPoints + pointsChange) < 0) { alert("顧客點數不足！"); return; }
+
+                const now = new Date();
+                const logRef = collection(db, "users", targetUserId, "point_log");
+
+                if (pointsChange > 0) {
+                    const days = parseInt(document.getElementById('custom-days-input').value) || 30;
+                    const expireDate = new Date(); expireDate.setDate(now.getDate() + days);
+                    await addDoc(logRef, { pointsObtained: pointsChange, obtainedAt: now.toISOString(), expiredAt: expireDate.toISOString(), status: "valid", remark: remark || "店員發放" });
+                } else {
+                    let pointsToDeduct = Math.abs(pointsChange);
+                    const q = query(logRef, where("status", "==", "valid"), orderBy("obtainedAt", "asc"));
+                    const querySnapshot = await getDocs(q);
+                    for (const pointDoc of querySnapshot.docs) {
+                        if (pointsToDeduct <= 0) break;
+                        const pointData = pointDoc.data();
+                        if (new Date() > new Date(pointData.expiredAt)) continue;
+                        const singleDocRef = doc(db, "users", targetUserId, "point_log", pointDoc.id);
+                        if (pointData.pointsObtained <= pointsToDeduct) {
+                            pointsToDeduct -= pointData.pointsObtained;
+                            await setDoc(singleDocRef, { status: "used" }, { merge: true });
+                        } else {
+                            await setDoc(singleDocRef, { status: "used", pointsObtained: pointsToDeduct }, { merge: true });
+                            await addDoc(logRef, { pointsObtained: pointData.pointsObtained - pointsToDeduct, obtainedAt: pointData.obtainedAt, expiredAt: pointData.expiredAt, status: "valid", remark: "拆分剩餘" });
+                            pointsToDeduct = 0;
+                        }
+                    }
+                    await addDoc(logRef, { pointsObtained: pointsChange, obtainedAt: now.toISOString(), expiredAt: now.toISOString(), status: "deducted", remark: remark });
+                }
+
+                let newPoints = currentPoints + pointsChange;
+                await setDoc(userDocRef, { totalPoints: newPoints < 0 ? 0 : newPoints }, { merge: true });
+                alert("操作成功！最新餘額：" + (newPoints < 0 ? 0 : newPoints));
+                document.getElementById('action-panel').style.display = "none";
+            } catch (e) { alert("雲端寫入失敗"); }
+        }
+
+        window.startScan = startScan; window.changePoints = changePoints; window.setExpireDays = setExpireDays; window.confirmSubmit = confirmSubmit;
     </script>
 
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; background-color: #f4f4f4; padding: 20px 10px; color: #333; }
-        .card { background-color: white; border-radius: 15px; padding: 20px; width: 90%; max-width: 360px; margin: 0 auto 20px auto; box-shadow: 0 4px 8px rgba(0,0,0,0.1); box-sizing: border-box; }
-        h1 { color: #2cb42c; font-size: 24px; margin: 5px 0; }
-        .user-name { font-size: 18px; font-weight: bold; margin: 10px 0; color: #111; }
+        body { font-family: Arial, sans-serif; text-align: center; background-color: #f4f4f4; padding: 15px 10px; color: #333; }
+        .card { background-color: white; border-radius: 15px; padding: 20px; width: 95%; max-width: 360px; margin: 0 auto 20px auto; box-shadow: 0 4px 8px rgba(0,0,0,0.1); box-sizing: border-box; }
+        h1, h2 { color: #2cb42c; font-size: 24px; margin: 5px 0; }
+        h2 { color: #1a73e8; }
+        .user-name { font-size: 18px; font-weight: bold; margin: 10px 0; }
         .points-section { background-color: #eafaea; border: 2px dashed #2cb42c; border-radius: 10px; padding: 10px; margin: 15px 0; }
-        .points-num { font-size: 42px; font-weight: bold; color: #2cb42c; line-height: 1.2; }
+        .points-num { font-size: 42px; font-weight: bold; color: #2cb42c; }
         .qrcode-section { margin: 20px auto; padding: 10px; background: #fff; width: 180px; height: 180px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); border-radius: 5px; }
-        .qrcode-tip { font-size: 13px; color: #e67e22; font-weight: bold; margin-bottom: 15px; }
-        .history-section { background-color: white; border-radius: 15px; padding: 20px; width: 90%; max-width: 360px; margin: 0 auto; box-shadow: 0 4px 8px rgba(0,0,0,0.1); text-align: left; box-sizing: border-box; }
-        .history-section h3 { margin-top: 0; color: #555; border-bottom: 1px solid #eee; padding-bottom: 8px; font-size: 16px; }
-        .history-list { list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto; }
-        .history-list li { padding: 10px 0; border-bottom: 1px solid #f9f9f9; font-size: 13px; line-height: 1.5; }
-        .history-list li:last-child { border-bottom: none; }
-        .loading { color: #888; }
+        .history-section { background-color: white; border-radius: 15px; padding: 20px; width: 95%; max-width: 360px; margin: 0 auto; box-shadow: 0 4px 8px rgba(0,0,0,0.1); text-align: left; box-sizing: border-box; }
+        .history-list { list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto; font-size: 13px; }
+        .history-list li { padding: 8px 0; border-bottom: 1px solid #eee; }
+        
+        /* 店員樣式 */
+        .scan-btn { width: 100%; padding: 15px; background-color: #2cb42c; color: white; border: none; border-radius: 8px; font-size: 18px; cursor: pointer; font-weight: bold; margin: 15px 0; }
+        .status-box { background: #f8f9fa; border-left: 4px solid #1a73e8; padding: 10px; font-size: 13px; text-align: left; }
+        .panel { display: none; border-top: 2px dashed #ccc; padding-top: 15px; text-align: left; }
+        .counter-box { display: flex; align-items: center; }
+        .btn-counter { width: 45px; height: 40px; background: #ddd; border: none; font-size: 20px; font-weight: bold; }
+        .input-points { width: 70px; height: 40px; text-align: center; font-size: 18px; border: 1px solid #ccc; }
+        .radio-group { display: flex; flex-wrap: wrap; gap: 10px; margin: 5px 0; }
+        .radio-btn { background: #fff; border: 1px solid #ccc; padding: 8px 12px; border-radius: 5px; font-size: 13px; }
+        .radio-btn:has(input:checked) { background: #1a73e8; color: white; }
+        input[type="text"], input[type="password"], input[type="number"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+        .submit-btn { width: 100%; padding: 12px; background-color: #1a73e8; color: white; border: none; font-size: 16px; font-weight: bold; margin-top: 15px; border-radius: 5px; }
     </style>
 </head>
 <body>
 
-    <div class="card">
-        <h1>數位集點卡</h1>
-        <div id="username" class="user-name loading">正在載入您的 LINE 資訊...</div>
-        
-        <div class="points-section">
-            <p style="margin:0; color:#666; font-size: 14px;">目前可用總點數</p>
-            <div id="points-display" class="points-num">--</div>
+    <div id="customer-view" style="display:none;">
+        <div class="card">
+            <h1>數位集點卡</h1>
+            <div id="username" class="user-name loading">正在載入您的 LINE 資訊...</div>
+            <div class="points-section">
+                <p style="margin:0; color:#666; font-size: 14px;">目前可用總點數</p>
+                <div id="points-display" class="points-num">--</div>
+            </div>
+            <p style="font-size:13px; color:#e67e22; font-weight:bold;">請出示下方條碼給店員掃描</p>
+            <div id="qrcode" class="qrcode-section"></div>
         </div>
-
-        <div class="qrcode-tip">請出示下方條碼給店員掃描</div>
-        <div id="qrcode" class="qrcode-section"></div>
+        <div class="history-section">
+            <h3 style="margin:0 0 10px 0;">歷史點數明細 (含過期日)</h3>
+            <ul id="history-list" class="history-list"><li>載入中...</li></ul>
+        </div>
     </div>
 
-    <div class="history-section">
-        <h3>歷史點數明細 (含過期日)</h3>
-        <ul id="history-list" class="history-list">
-            <li>載入中...</li>
-        </ul>
+    <div id="staff-view" style="display:none;" class="card">
+        <h2>店家管理端後台</h2>
+        <div id="staff-status" class="status-box">權限檢查中...</div>
+        <button class="scan-btn" onclick="startScan()">📷 開啟相機 掃描會員</button>
+        
+        <div id="action-panel" class="panel">
+            <div style="background:#e8f0fe; padding:8px; font-weight:bold;" id="customer-name-display">--</div>
+            <div style="margin: 15px 0;">
+                <label style="font-weight:bold; display:block;">發放/扣除點數設定：</label>
+                <div class="counter-box">
+                    <button class="btn-counter" onclick="changePoints(-1)">-</button>
+                    <input type="number" id="points-input" class="input-points" value="1">
+                    <button class="btn-counter" onclick="changePoints(1)">+</button>
+                </div>
+            </div>
+            <div id="expiry-group" style="margin: 15px 0;">
+                <label style="font-weight:bold;">點數有效期限：</label>
+                <div class="radio-group">
+                    <label class="radio-btn"><input type="radio" name="expiry" onclick="setExpireDays(30)" checked>30 天</label>
+                    <label class="radio-btn"><input type="radio" name="expiry" onclick="setExpireDays(60)">60 天</label>
+                    <label class="radio-btn"><input type="radio" name="expiry" onclick="setExpireDays(90)">90 天</label>
+                    <label class="radio-btn"><input type="radio" name="expiry" onclick="setExpireDays('custom')">自訂天數</label>
+                </div>
+                <input type="number" id="custom-days-input" value="30" style="display:none; margin-top:5px;">
+            </div>
+            <div style="margin: 15px 0;">
+                <label style="font-weight:bold; display:block;">異動原因備註 (扣點必填)：</label>
+                <input type="text" id="remark-input" placeholder="例如：消費滿百、兌換咖啡">
+            </div>
+            <div style="margin: 15px 0;">
+                <label style="font-weight:bold; display:block;">管理員密碼：</label>
+                <input type="password" id="staff-pass" placeholder="請輸入後台密碼">
+            </div>
+            <button class="submit-btn" onclick="confirmSubmit()">確定執行並寫入雲端</button>
+        </div>
     </div>
 
 </body>
