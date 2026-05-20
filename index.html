@@ -28,7 +28,7 @@
         let customerClickCount = 0; 
         let staffClickCount = 0;    
         let pendingCancel = {}; 
-        let pendingDeleteUid = ""; // 暫存準備刪除的會員UID
+        let pendingDeleteUid = ""; // 暫存準備刪除的會員 UID
 
         window.onload = function() {
             liff.init({ liffId: myLiffId, withLoginOnExternalBrowser: true })
@@ -142,10 +142,10 @@
             }
         }
 
-        // 【全新功能】大老闆娘刪除會員圖層開關
+        // 大老闆娘刪除會員圖層開關
         function showDeleteMemberModal(uid, name) {
             pendingDeleteUid = uid;
-            document.getElementById('delete-member-msg').innerText = `⚠️ 警告：您即將永久刪除會員【 ${name} 】！\n此操作將一併抹除該會員的所有歷史點數且無法復原。`;
+            document.getElementById('delete-member-msg').innerText = `⚠️ 警告：您即將永久刪除會員【 ${name} 】！\n此操作將一併刪除該會員的所有歷史點數且無法復原。`;
             document.getElementById('delete-confirm-input').value = ""; // 清空輸入框
             document.getElementById('delete-member-overlay').style.display = "flex";
         }
@@ -155,8 +155,9 @@
         }
         async function executeDeleteMember() {
             const inputTxt = document.getElementById('delete-confirm-input').value.trim();
-            if (inputTxt !== "確定刪除") {
-                showCustomAlert("防呆驗證字串輸入錯誤，取消刪除操作！");
+            // 【全新精簡】改為驗證 del 三個英文字母
+            if (inputTxt !== "del") {
+                showCustomAlert("防呆驗證碼輸入錯誤，取消刪除操作！");
                 return;
             }
             if (!pendingDeleteUid) return;
@@ -344,7 +345,7 @@
                 querySnapshot.forEach((docSnap) => {
                     const data = docSnap.data();
                     const uid = docSnap.id;
-                    const safeName = (data.lineName || '未命名用戶').replace(/'/g, "\\'"); // 防呆過濾特殊字元
+                    const safeName = (data.lineName || '未命名用戶').replace(/'/g, "\\'"); 
                     html += `
                         <div class="customer-item">
                             <div class="customer-info-row" onclick="toggleCustomerDetails('${uid}')">
@@ -477,7 +478,6 @@
         .modal-btn-confirm { flex: 1; background: #ffeef0; color: #c97288; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; }
         .modal-btn-confirm:hover { background: #ffd9e0; }
         
-        /* 刪除專用強烈警告按鈕樣式 */
         .modal-btn-danger-confirm { flex: 1; background: #d9534f; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; }
         .modal-btn-danger-confirm:hover { background: #c9302c; }
         
@@ -584,15 +584,15 @@
 
     <div id="delete-member-overlay" class="modal-overlay">
         <div class="modal-box" style="border: 2px solid #d9534f;">
-            <div class="modal-title" style="color: #d9534f;">🚨 永久註銷會員</div>
+            <div class="modal-title" style="color: #d9534f;">🚨 永久刪除會員</div>
             <div id="delete-member-msg" class="modal-text" style="text-align: left; font-size: 13px;">確認刪除訊息</div>
             <div style="margin-bottom: 15px; text-align: left;">
-                <label style="font-size: 12px; font-weight: bold; color: #d9534f; display: block; margin-bottom: 5px;">請手動輸入「確定刪除」以執行最高權限：</label>
-                <input type="text" id="delete-confirm-input" placeholder="請精準輸入這四個字">
+                <label style="font-size: 12px; font-weight: bold; color: #d9534f; display: block; margin-bottom: 5px;">請手動輸入「del」以執行最高權限：</label>
+                <input type="text" id="delete-confirm-input" placeholder="請精準輸入 del">
             </div>
             <div class="modal-btn-row">
                 <button class="modal-btn-cancel" onclick="closeDeleteMemberModal()">取消</button>
-                <button class="modal-btn-danger-confirm" onclick="executeDeleteMember()">強行永久抹除</button>
+                <button class="modal-btn-danger-confirm" onclick="executeDeleteMember()">強行永久刪除</button>
             </div>
         </div>
     </div>
