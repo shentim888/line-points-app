@@ -95,7 +95,7 @@
                 document.getElementById('customer-view').style.display = "none";
                 document.getElementById('staff-view').style.display = "none";
                 document.getElementById('boss-view').style.display = "block";
-                showCustomAlert("歡迎最美老闆娘登入最高管理系統");
+                showCustomAlert("歡迎最美老闆娘登入最高階系統");
                 loadAllCustomers(); 
             } else {
                 closeBossLoginModal(); 
@@ -491,9 +491,9 @@
     </div>
 
     <div id="boss-view" style="display:none;" class="card">
-        <h2>最美老闆娘總管理系統</h2>
+        <h2>最美老闆娘後台系統</h2>
         <div style="background:white; padding:8px; border-left:4px solid #c97288; font-size:12px; text-align:left; color:#8a7377; margin-bottom:15px;">
-            提示：點擊下方會員列可直接展開「存摺明細」，並可跨時空逐筆註銷帳目。
+            提示：點擊下方會員列可直接展開「點數明細」，並可逐筆註銷帳目。
         </div>
         <button class="scan-btn" onclick="loadAllCustomers()">🔄 重新整理會員名冊</button>
         
@@ -509,9 +509,9 @@
 
     <div id="boss-login-overlay" class="modal-overlay">
         <div class="modal-box">
-            <div class="modal-title">認證確認</div>
-            <div class="modal-text">請輸入最美老闆娘專用最高權限密碼：</div>
-            <input type="password" id="boss-pass-input" placeholder="請輸入專屬驗證碼" style="margin-bottom: 15px;">
+            <div class="modal-title">輸入密碼</div>
+            <div class="modal-text">請輸入最美老闆娘專用密碼：</div>
+ut type="password" id="boss-pass-input" placeholder="" style="margin-bottom: 15px;">            <inp
             <div class="modal-btn-row">
                 <button class="modal-btn-cancel" onclick="closeBossLoginModal()">取消</button>
                 <button class="modal-btn-confirm" onclick="confirmBossLogin()">解鎖系統</button>
