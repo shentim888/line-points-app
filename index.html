@@ -23,9 +23,10 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // 統一使用第一個官方認證的最基礎 LIFF ID
+        // 統一使用官方認證的最高權限基礎 LIFF ID
         const myLiffId = '2010135064-mXyTOHst'; 
         let targetUserId = ""; 
+        let clickCount = 0; // 計算點擊次數用
 
         window.onload = function() {
             liff.init({ liffId: myLiffId, withLoginOnExternalBrowser: true })
@@ -33,29 +34,36 @@
                     if (!liff.isLoggedIn()) {
                         liff.login();
                     } else {
-                        const urlParams = new URLSearchParams(window.location.search);
-                        const isStaff = urlParams.get('mode') === 'staff';
-
-                        if (isStaff) {
-                            document.getElementById('customer-view').style.display = "none";
-                            document.getElementById('staff-view').style.display = "block";
-                            document.getElementById('staff-status').innerText = "管理員就緒。網域安全檢查通過。";
-                        } else {
-                            document.getElementById('customer-view').style.display = "block";
-                            document.getElementById('staff-view').style.display = "none";
-                            
-                            liff.getProfile().then(profile => {
-                                document.getElementById('username').innerText = "嗨！ " + profile.displayName;
-                                document.getElementById('username').classList.remove('loading');
-                                checkAndCreateUserWallet(profile.userId, profile.displayName);
-                                generateMemberQRCode(profile.userId);
-                                loadPointHistory(profile.userId);
-                            });
-                        }
+                        // 預設一律先載入顧客端畫面，確保網域 100% 匹配成功
+                        document.getElementById('customer-view').style.display = "block";
+                        document.getElementById('staff-view').style.display = "none";
+                        
+                        liff.getProfile().then(profile => {
+                            document.getElementById('username').innerText = "嗨！ " + profile.displayName;
+                            document.getElementById('username').classList.remove('loading');
+                            checkAndCreateUserWallet(profile.userId, profile.displayName);
+                            generateMemberQRCode(profile.userId);
+                            loadPointHistory(profile.userId);
+                        });
                     }
                 })
                 .catch(err => showCustomAlert("系統初始化失敗: " + err));
         };
+
+        // 【全新穩定功能】點擊標題 5 下觸發後台切換
+        function handleTitleClick() {
+            clickCount++;
+            if (clickCount === 5) {
+                // 隱藏顧客端，切換至店家後台
+                document.getElementById('customer-view').style.display = "none";
+                document.getElementById('staff-view').style.display = "block";
+                document.getElementById('staff-status').innerText = "管理員就緒。最高相機權限已順利解鎖。";
+                clickCount = 0; // 重置計數
+                showCustomAlert("已成功切換至店家管理後台");
+            }
+            // 防呆：如果店員點太慢，3秒後自動重置計數
+            setTimeout(() => { clickCount = 0; }, 3000);
+        }
 
         // 自訂商用彈窗控制函式
         function showCustomAlert(msg) {
@@ -201,27 +209,22 @@
             } catch (e) { showCustomAlert("雲端寫入失敗"); }
         }
 
-        window.startScan = startScan; window.changePoints = changePoints; window.setExpireDays = setExpireDays; window.confirmSubmit = confirmSubmit; window.closeCustomAlert = closeCustomAlert;
+        window.startScan = startScan; window.changePoints = changePoints; window.setExpireDays = setExpireDays; window.confirmSubmit = confirmSubmit; window.closeCustomAlert = closeCustomAlert; window.handleTitleClick = handleTitleClick;
     </script>
 
     <style>
-        /* 背景優化：極淡粉白（白中帶有極輕微暖粉，不偏紫） */
+        /* 背景優化：乾淨柔和的粉白櫻花系底色 */
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center; background-color: #fffbfc; padding: 15px 10px; color: #5c4d50; }
-        
-        /* 卡片底色：輕柔粉白 */
         .card { background-color: #fff5f6; border-radius: 16px; padding: 24px; width: 95%; max-width: 360px; margin: 0 auto 20px auto; box-shadow: 0 4px 20px rgba(240, 210, 215, 0.25); box-sizing: border-box; }
         
-        /* 標題與名字：有質感的溫柔暖粉紅（絕不偏紫） */
-        h1, h2 { color: #c97288; font-size: 24px; margin: 5px 0; font-weight: bold; }
+        /* 標題調校：加上 user-select:none 避免連續點擊時產生藍色文字選取陰影 */
+        h1, h2 { color: #c97288; font-size: 24px; margin: 5px 0; font-weight: bold; user-select: none; -webkit-user-select: none; }
         .user-name { font-size: 18px; font-weight: bold; margin: 12px 0; color: #6e5b5e; }
         
-        /* 總點數框：白底配淡淡櫻花粉外框 */
         .points-section { background-color: white; border: 2px dashed #fcdce2; border-radius: 12px; padding: 12px; margin: 18px 0; }
         .points-num { font-size: 46px; font-weight: bold; color: #c97288; }
-        
         .qrcode-section { margin: 20px auto; padding: 12px; background: #fff; width: 180px; height: 180px; box-shadow: 0 4px 12px rgba(240, 210, 215, 0.2); border-radius: 8px; }
         
-        /* 明細外框與列表細節 */
         .history-section { background-color: #fff5f6; border-radius: 16px; padding: 20px; width: 95%; max-width: 360px; margin: 0 auto; box-shadow: 0 4px 20px rgba(240, 210, 215, 0.25); text-align: left; box-sizing: border-box; }
         .history-section h3 { font-size: 15px; margin: 0 0 12px 0; color: #8a7377; border-bottom: 1px solid #fcdce2; padding-bottom: 8px; }
         .history-list { list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto; font-size: 13px; }
@@ -229,21 +232,18 @@
         .history-list li strong { color: #c97288; }
         .history-list li small { color: #a18b8f; }
         
-        /* 【店員端按鈕更新】升級為乾淨、輕盈的極淺粉紅色 (#ffeef0 / 點擊時 #ffd9e0) */
+        /* 按鈕視覺：更淡、更清爽的粉白色調 */
         .scan-btn { width: 100%; padding: 15px; background-color: #ffeef0; color: #c97288; border: none; border-radius: 10px; font-size: 18px; cursor: pointer; font-weight: bold; margin: 15px 0; transition: background 0.2s; box-shadow: 0 2px 6px rgba(240, 210, 215, 0.15); }
         .scan-btn:hover { background-color: #ffd9e0; }
         
         .status-box { background: white; border-left: 4px solid #ffeef0; padding: 10px; font-size: 13px; text-align: left; color: #8a7377; border-radius: 0 4px 4px 0; }
         .panel { display: none; border-top: 1px dashed #fcdce2; padding-top: 15px; text-align: left; }
-        
-        /* 加減計數器按鈕 */
         .counter-box { display: flex; align-items: center; }
         .btn-counter { width: 45px; height: 40px; background: white; border: 1px solid #fcdce2; font-size: 20px; font-weight: bold; color: #c97288; cursor: pointer; }
         .btn-counter:first-child { border-radius: 6px 0 0 6px; }
         .btn-counter:last-child { border-radius: 0 6px 6px 0; }
         .input-points { width: 70px; height: 40px; text-align: center; font-size: 18px; border-top: 1px solid #fcdce2; border-bottom: 1px solid #fcdce2; border-left: none; border-right: none; font-weight: bold; color: #c97288; background: white; }
         
-        /* 期限選單按鈕 */
         .radio-group { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
         .radio-btn { background: white; border: 1px solid #fcdce2; padding: 8px 12px; border-radius: 6px; font-size: 13px; color: #8a7377; cursor: pointer; }
         .radio-btn input { display: none; }
@@ -252,11 +252,9 @@
         input[type="text"], input[type="password"], input[type="number"] { width: 100%; padding: 12px; border: 1px solid #fcdce2; border-radius: 8px; box-sizing: border-box; background-color: white; color: #5c4d50; }
         input:focus { outline: none; border-color: #c97288; }
         
-        /* 確定按鈕同步改為極淺粉紅色 */
         .submit-btn { width: 100%; padding: 14px; background-color: #ffeef0; color: #c97288; border: none; font-size: 16px; font-weight: bold; margin-top: 15px; border-radius: 10px; cursor: pointer; transition: background 0.2s; box-shadow: 0 2px 6px rgba(240, 210, 215, 0.15); }
         .submit-btn:hover { background-color: #ffd9e0; }
 
-        /* 自訂彈窗調色：白底配淡粉紅按鈕 */
         .custom-alert-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); z-index: 9999; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; }
         .custom-alert-box { background: white; padding: 25px; border-radius: 16px; max-width: 320px; width: 100%; box-shadow: 0 10px 30px rgba(240, 210, 215, 0.3); text-align: center; animation: popIn 0.2s ease-out; }
         .custom-alert-text { font-size: 16px; font-weight: bold; color: #5c4d50; margin-bottom: 20px; line-height: 1.4; }
@@ -269,13 +267,13 @@
 
     <div id="customer-view" style="display:none;">
         <div class="card">
-            <h1>數位集點卡</h1>
+            <h1 onclick="handleTitleClick()" style="cursor: pointer;">集點卡</h1>
             <div id="username" class="user-name loading">正在載入您的 LINE 資訊...</div>
             <div class="points-section">
                 <p style="margin:0; color:#8a7377; font-size: 14px;">目前可用總點數</p>
                 <div id="points-display" class="points-num">--</div>
             </div>
-            <p style="font-size:13px; color:#c97288; font-weight:bold;">請出示下方條碼給店員掃描</p>
+            <p style="font-size:13px; color:#c97288; font-weight:bold;">請出示下方條碼給店家掃描</p>
             <div id="qrcode" class="qrcode-section"></div>
         </div>
         <div class="history-section">
