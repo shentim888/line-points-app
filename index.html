@@ -27,7 +27,7 @@
         let targetUserId = ""; 
         let customerClickCount = 0; 
         let staffClickCount = 0;    
-        let pendingCancel = {}; // 確保初始是個乾淨物件
+        let pendingCancel = {}; 
         let pendingDeleteUid = ""; 
 
         window.onload = function() {
@@ -108,7 +108,7 @@
             }
         }
 
-        // 【精準修正 1】：彈出註銷確認框時，確保所有欄位被死死綁定
+        // 註銷確認框
         function showCancelConfirmModal(uid, logId, pointsValue) {
             pendingCancel = { 
                 uid: String(uid), 
@@ -123,7 +123,7 @@
             pendingCancel = {}; 
         }
         
-        // 【精準修正 2】：徹底解決地址 undefined 的 Bug
+        // 執行註銷點數
         async function executeCancelPoint() {
             if (!pendingCancel.uid || !pendingCancel.logId) {
                 showCustomAlert("系統地址解析失敗，請重新整理著名冊再試。");
@@ -156,14 +156,14 @@
                 }, 300); 
 
             } catch (e) { 
-                console.error("底層錯誤分析: ", e);
-                setTimeout(() => { showCustomAlert("最高權限寫入失敗，請重試。"); }, 300);
+                console.error(e);
+                setTimeout(() => { showCustomAlert("最高權限寫入失敗，請確認 Firebase 索引是否建立完成。"); }, 300);
             }
         }
 
-        // 永久刪除會員圖層
+        // 【精準鋼印防護】：彈出永久刪除會員圖層，直接強制塞入 UID，絕不遺失
         function showDeleteMemberModal(uid, name) {
-            pendingDeleteUid = uid;
+            pendingDeleteUid = String(uid); 
             document.getElementById('delete-member-msg').innerText = `⚠️ 警告：您即將永久刪除會員【 ${name} 】！\n此操作將一併刪除該會員的所有歷史點數且無法復原。`;
             document.getElementById('delete-confirm-input').value = ""; 
             document.getElementById('delete-member-overlay').style.display = "flex";
@@ -172,23 +172,32 @@
             document.getElementById('delete-member-overlay').style.display = "none";
             pendingDeleteUid = "";
         }
+        
+        // 【徹底解決 segments Bug】：執行全面刪除
         async function executeDeleteMember() {
             const inputTxt = document.getElementById('delete-confirm-input').value.trim();
             if (inputTxt !== "del") {
                 showCustomAlert("防呆驗證碼輸入錯誤，取消刪除操作！");
                 return;
             }
-            if (!pendingDeleteUid) return;
+            if (!pendingDeleteUid || pendingDeleteUid === "undefined") {
+                showCustomAlert("系統偵測到會員編號遺失，請重新點擊名冊再試。");
+                return;
+            }
 
+            const activeDeleteUid = pendingDeleteUid; 
             closeDeleteMemberModal(); 
 
             try {
-                const logRef = collection(db, "users", pendingDeleteUid, "point_log");
+                // 1. 先撈出該特定客人的所有明細並逐一刪除
+                const logRef = collection(db, "users", activeDeleteUid, "point_log");
                 const querySnapshot = await getDocs(logRef);
                 for (const docSnap of querySnapshot.docs) {
-                    await deleteDoc(doc(db, "users", pendingDeleteUid, "point_log", docSnap.id));
+                    await deleteDoc(doc(db, "users", activeDeleteUid, "point_log", docSnap.id));
                 }
-                await deleteDoc(doc(db, "users", pendingDeleteUid));
+                
+                // 2. 刪除該客人的主錢包資料
+                await deleteDoc(doc(db, "users", activeDeleteUid));
 
                 setTimeout(() => {
                     showCustomAlert("該會員資料已從雲端全面永久刪除！");
@@ -196,7 +205,8 @@
                 }, 300);
 
             } catch (e) {
-                setTimeout(() => { showCustomAlert("最高權限刪除失敗: " + e); }, 300);
+                console.error("刪除時發生錯誤: ", e);
+                setTimeout(() => { showCustomAlert("最高權限刪除失敗: " + e.message); }, 300);
             }
         }
 
@@ -344,6 +354,7 @@
             } catch (e) { showCustomAlert("雲端寫入失敗"); }
         }
 
+        // 載入全店會員
         async function loadAllCustomers() {
             const listEl = document.getElementById('boss-customer-list');
             listEl.innerHTML = "<div style='text-align:center; padding:15px; color:#a18b8f;'>正在撈取全店會員總冊...</div>";
@@ -355,7 +366,7 @@
                 let html = "";
                 querySnapshot.forEach((docSnap) => {
                     const data = docSnap.data();
-                    const uid = docSnap.id;
+                    const uid = String(docSnap.id);
                     const safeName = (data.lineName || '未命名用戶').replace(/'/g, "\\'"); 
                     html += `
                         <div class="customer-item">
@@ -371,7 +382,7 @@
                         </div>`;
                 });
                 listEl.innerHTML = html;
-            } catch (e) { listRef.innerHTML = "<p>會員總冊載入失敗</p>"; }
+            } catch (e) { listEl.innerHTML = "<p>會員總冊載入失敗</p>"; }
         }
 
         window.toggleCustomerDetails = async function(uid) {
