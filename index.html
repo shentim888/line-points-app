@@ -115,7 +115,7 @@
                 logId: String(logId), 
                 pointsValue: parseInt(pointsValue) 
             };
-            document.getElementById('cancel-confirm-msg').innerText = `確定要註銷這筆 [ ${pointsValue > 0 ? '+'+pointsValue : pointsValue} 點 ] 的紀錄嗎？\n系統將自動扣除該會員的總餘額！`;
+            document.getElementById('cancel-confirm-msg').innerText = `確定要註銷這筆 [ ${pointsValue > 0 ? '+'+pointsValue : pointsValue} 點 ] 的紀錄嗎？\n系統將自動自該會員總餘額扣除或補回！`;
             document.getElementById('cancel-confirm-overlay').style.display = "flex";
         }
         function closeCancelConfirmModal() {
@@ -145,8 +145,8 @@
                 const userDocSnap = await getDoc(userDocRef);
                 if (userDocSnap.exists()) {
                     let currentTotal = userDocSnap.data().totalPoints || 0;
+                    // 【精準校正】：直接相減，不再強制攔截歸零，允許產生真實負值
                     let newTotal = currentTotal - pVal;
-                    if (newTotal < 0) newTotal = 0;
                     await updateDoc(userDocRef, { totalPoints: newTotal });
                 }
                 
@@ -161,7 +161,7 @@
             }
         }
 
-        // 【精準鋼印防護】：彈出永久刪除會員圖層，直接強制塞入 UID，絕不遺失
+        // 永久刪除會員圖層
         function showDeleteMemberModal(uid, name) {
             pendingDeleteUid = String(uid); 
             document.getElementById('delete-member-msg').innerText = `⚠️ 警告：您即將永久刪除會員【 ${name} 】！\n此操作將一併刪除該會員的所有歷史點數且無法復原。`;
@@ -173,7 +173,7 @@
             pendingDeleteUid = "";
         }
         
-        // 【徹底解決 segments Bug】：執行全面刪除
+        // 執行全面刪除
         async function executeDeleteMember() {
             const inputTxt = document.getElementById('delete-confirm-input').value.trim();
             if (inputTxt !== "del") {
@@ -189,14 +189,11 @@
             closeDeleteMemberModal(); 
 
             try {
-                // 1. 先撈出該特定客人的所有明細並逐一刪除
                 const logRef = collection(db, "users", activeDeleteUid, "point_log");
                 const querySnapshot = await getDocs(logRef);
                 for (const docSnap of querySnapshot.docs) {
                     await deleteDoc(doc(db, "users", activeDeleteUid, "point_log", docSnap.id));
                 }
-                
-                // 2. 刪除該客人的主錢包資料
                 await deleteDoc(doc(db, "users", activeDeleteUid));
 
                 setTimeout(() => {
@@ -316,7 +313,8 @@
                 const userDocRef = doc(db, "users", targetUserId);
                 const userDocSnap = await getDoc(userDocRef);
                 let currentPoints = userDocSnap.exists() ? (userDocSnap.data().totalPoints || 0) : 0;
-                if (pointsChange < 0 && (currentPoints + pointsChange) < 0) { showCustomAlert("顧客點數不足！"); return; }
+                // 【精準校正】：允許店員端操作後產生負值（例如強制校正帳目扣點）
+                let newPoints = currentPoints + pointsChange;
 
                 const now = new Date();
                 const logRef = collection(db, "users", targetUserId, "point_log");
@@ -346,9 +344,8 @@
                     await addDoc(logRef, { pointsObtained: pointsChange, obtainedAt: now.toISOString(), expiredAt: now.toISOString(), status: "deducted", remark: remark });
                 }
 
-                let newPoints = currentPoints + pointsChange;
-                await setDoc(userDocRef, { totalPoints: newPoints < 0 ? 0 : newPoints }, { merge: true });
-                showCustomAlert("操作成功！點數餘額：" + (newPoints < 0 ? 0 : newPoints));
+                await setDoc(userDocRef, { totalPoints: newPoints }, { merge: true });
+                showCustomAlert("操作成功！最新餘額：" + newPoints);
                 document.getElementById('action-panel').style.display = "none";
                 loadPointHistory(targetUserId);
             } catch (e) { showCustomAlert("雲端寫入失敗"); }
