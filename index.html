@@ -4,26 +4,105 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>我的會員集點卡</title>
-    <!-- 引入 LINE LIFF 的官方 SDK 套件 -->
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // ========================================================
+        // 【重要設定 1】請把下方的大括號內容，換成你剛複製的 Firebase 金鑰
+        // ========================================================
+        const firebaseConfig = {
+        apiKey: "AIzaSyAqsN1y3eNHtQ4PiYpWIuxZC8eN6o0bK24",
+        authDomain: "line-loyalty-card.firebaseapp.com",
+        projectId: "line-loyalty-card",
+        storageBucket: "line-loyalty-card.firebasestorage.app",
+        messagingSenderId: "284106917293",
+        appId: "1:284106917293:web:2675c8c6dfe4d4d27e4d24"
+        };
+
+        // 初始化 Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // ========================================================
+        // 【重要設定 2】請把下方的字串換成 your LINE LIFF ID
+        // ========================================================
+        const myLiffId = '2010135064-mXyTOHst'; 
+
+        // 網頁載入後的執行邏輯
+        window.onload = function() {
+            liff.init({ liffId: myLiffId })
+                .then(() => {
+                    if (!liff.isLoggedIn()) {
+                        liff.login();
+                    } else {
+                        // 成功登入 LINE，開始抓個人資料
+                        liff.getProfile()
+                            .then(profile => {
+                                const userId = profile.userId; // 這是使用者在 LINE 的唯一身份身分證號
+                                const userName = profile.displayName; // LINE 名字
+
+                                // 顯示歡迎詞
+                                document.getElementById('username').innerText = "嗨！ " + userName;
+                                document.getElementById('username').classList.remove('loading');
+
+                                // 呼叫檢查資料庫的魔法函式
+                                checkAndCreateUserWallet(userId, userName);
+                            })
+                            .catch(err => console.error('抓取 LINE 檔案失敗', err));
+                    }
+                })
+                .catch(err => {
+                    console.error('LIFF 初始化失敗', err);
+                    document.getElementById('username').innerText = "系統初始化失敗";
+                });
+        };
+
+        // 【資料庫核心邏輯】檢查並建立點數存摺
+        async function checkAndCreateUserWallet(userId, userName) {
+            const statusEl = document.getElementById('status');
+            const pointsEl = document.getElementById('points-display');
+            
+            try {
+                // 去資料庫的 "users" 資料夾（集合）裡，尋找有沒有這個 LINE userId 的檔案
+                const userDocRef = doc(db, "users", userId);
+                const userDocSnap = await getDoc(userDocRef);
+
+                if (userDocSnap.exists()) {
+                    // 檔案存在，代表是老顧客！讀取他目前的總點數
+                    const userData = userDocSnap.data();
+                    statusEl.innerText = "歡迎回來！成功載入您的雲端存摺。";
+                    pointsEl.innerText = userData.totalPoints || 0;
+                } else {
+                    // 檔案不存在，代表是新顧客！立刻幫他在雲端開戶
+                    statusEl.innerText = "偵測到新會員！正在為您開通雲端點數存摺...";
+                    
+                    await setDoc(userDocRef, {
+                        lineName: userName,
+                        totalPoints: 0, // 新開戶，點數先給 0 點
+                        createdAt: new Date().toISOString()
+                    });
+
+                    statusEl.innerText = "開戶成功！歡迎成為新會員！";
+                    pointsEl.innerText = 0;
+                }
+            } catch (error) {
+                console.error("資料庫連線錯誤:", error);
+                statusEl.innerText = "雲端資料庫連線失敗，請檢查金鑰或權限設定。";
+            }
+        }
+    </script>
+
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            background-color: #f4f4f4;
-            padding-top: 50px;
-        }
-        .card {
-            background-color: white;
-            border-radius: 15px;
-            padding: 30px;
-            width: 80%;
-            max-width: 350px;
-            margin: 0 auto;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        h1 { color: #2cb42c; }
-        .user-name { font-size: 20px; font-weight: bold; margin: 20px 0; }
+        body { font-family: Arial, sans-serif; text-align: center; background-color: #f4f4f4; padding-top: 50px; color: #333; }
+        .card { background-color: white; border-radius: 15px; padding: 30px; width: 80%; max-width: 350px; margin: 0 auto; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1 { color: #2cb42c; margin-bottom: 5px; }
+        .user-name { font-size: 20px; font-weight: bold; margin: 15px 0; color: #111; }
+        .points-section { background-color: #eafaea; border: 2px dashed #2cb42c; border-radius: 10px; padding: 15px; margin: 20px 0; }
+        .points-num { font-size: 48px; font-weight: bold; color: #2cb42c; }
+        .status-msg { font-size: 12px; color: #666; margin-top: 15px; background: #eee; padding: 5px; border-radius: 5px; }
         .loading { color: #888; }
     </style>
 </head>
@@ -31,39 +110,16 @@
 
     <div class="card">
         <h1>數位集點卡</h1>
-        <!-- 這裡用來顯示使用者的名字 -->
-        <div id="username" class="loading">正在載入您的 LINE 資訊...</div>
-        <p>歡迎來到您的專屬集點頁面！</p>
+        <div id="username" class="user-name loading">正在載入您的 LINE 資訊...</div>
+        
+        <div class="points-section">
+            <p style="margin:0; color:#666;">目前可用點數</p>
+            <div id="points-display" class="points-num">--</div>
+            <p style="margin:0; font-size:12px; color:#999;">點數將依獲得日期個別計算效期</p>
+        </div>
+
+        <div id="status" class="status-msg">正在與雲端資料庫同步...</div>
     </div>
-
-    <script>
-        // 【重要】請把下方的 '你的LIFF_ID' 改成你自己的 LIFF ID
-        // 例如你的網址是 https://liff.line.me/123456-abcde，那你的 LIFF ID 就是 '123456-abcde'
-        const myLiffId = '2010135064-mXyTOHst'; 
-
-        // 初始化 LINE LIFF 系統
-        liff.init({ liffId: myLiffId })
-            .then(() => {
-                // 檢查使用者是否已經在 LINE 登入
-                if (!liff.isLoggedIn()) {
-                    // 如果沒有登入，引導使用者登入
-                    liff.login();
-                } else {
-                    // 如果登入成功，去抓取使用者的個人資料
-                    liff.getProfile()
-                        .then(profile => {
-                            // 把網頁上的「正在載入...」換成使用者的 LINE 名字
-                            document.getElementById('username').innerText = "嗨！ " + profile.displayName;
-                            document.getElementById('username').classList.remove('loading');
-                        })
-                        .catch(err => console.error('抓取資料失敗：', err));
-                }
-            })
-            .catch(err => {
-                console.error('LIFF 初始化失敗：', err);
-                document.getElementById('username').innerText = "系統初始化失敗，請稍後再試";
-            });
-    </script>
 
 </body>
 </html>
