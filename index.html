@@ -9,7 +9,7 @@
     
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, orderBy, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAqsN1y3eNHtQ4PiYpWIuxZC8eN6o0bK24",
@@ -35,6 +35,7 @@
                     } else {
                         document.getElementById('customer-view').style.display = "block";
                         document.getElementById('staff-view').style.display = "none";
+                        document.getElementById('boss-view').style.display = "none";
                         
                         liff.getProfile().then(profile => {
                             document.getElementById('username').innerText = "嗨！ " + profile.displayName;
@@ -48,16 +49,37 @@
                 .catch(err => showCustomAlert("系統初始化失敗: " + err));
         };
 
+        // 智慧暗號判定：5下進店員、10下進老闆
         function handleTitleClick() {
             clickCount++;
+            
             if (clickCount === 5) {
-                document.getElementById('customer-view').style.display = "none";
-                document.getElementById('staff-view').style.display = "block";
-                document.getElementById('staff-status').innerText = "管理員就緒。最高相機權限已順利解鎖。";
-                clickCount = 0; 
-                showCustomAlert("已成功切換至店家管理後台");
+                setTimeout(() => {
+                    if (clickCount >= 5 && clickCount < 10) {
+                        document.getElementById('customer-view').style.display = "none";
+                        document.getElementById('boss-view').style.display = "none";
+                        document.getElementById('staff-view').style.display = "block";
+                        document.getElementById('staff-status').innerText = "管理員就緒。最高相機權限已順利解鎖。";
+                        clickCount = 0;
+                        showCustomAlert("已成功切換至店家管理後台");
+                    }
+                }, 1500); 
             }
-            setTimeout(() => { clickCount = 0; }, 3000);
+            
+            if (clickCount === 10) {
+                const bossPass = prompt("請輸入最美老闆娘密碼：");
+                if (bossPass === "0412888") {
+                    document.getElementById('customer-view').style.display = "none";
+                    document.getElementById('staff-view').style.display = "none";
+                    document.getElementById('boss-view').style.display = "block";
+                    clickCount = 0;
+                    showCustomAlert("解鎖成功！歡迎來到老闆娘專用管理系統");
+                    loadAllCustomers(); 
+                } else {
+                    showCustomAlert("密碼錯誤，拒絕存取最美老闆娘最高權限！");
+                    clickCount = 0;
+                }
+            }
         }
 
         function showCustomAlert(msg) {
@@ -90,7 +112,6 @@
             new QRCode(document.getElementById("qrcode"), { text: userId, width: 180, height: 180 });
         }
 
-        // 【大修正】精準修正明細對帳邏輯，防止重複出現扣點紀錄
         async function loadPointHistory(userId) {
             const historyListEl = document.getElementById('history-list');
             try {
@@ -102,38 +123,24 @@
                 let htmlContent = "";
                 querySnapshot.forEach((docSnap) => {
                     const data = docSnap.data();
-                    
-                    // 關鍵防呆攔截：被先進先出扣除的原始加點紀錄（status 為 used），我們不重疊顯示在畫面上
-                    if (data.status === "used") {
-                        return; 
-                    }
+                    if (data.status === "used") return; 
 
                     let statusTxt = "有效";
                     if (data.status === "deducted") statusTxt = "已扣除";
                     if (data.status === "canceled") statusTxt = "已註銷";
-                    
-                    // 檢查是否過期
-                    if (data.status === "valid" && new Date() > new Date(data.expiredAt)) {
-                        statusTxt = "已過期";
-                    }
+                    if (data.status === "valid" && new Date() > new Date(data.expiredAt)) statusTxt = "已過期";
 
                     let pointStr = data.pointsObtained > 0 ? `+${data.pointsObtained}` : `${data.pointsObtained}`;
                     let dateInfo = `發放日: ${new Date(data.obtainedAt).toLocaleDateString()}`;
                     
-                    // 如果是扣點行為，不需要顯示到期日
                     if (data.status !== "deducted" && data.status !== "canceled") {
                         dateInfo += ` | 到期日: ${new Date(data.expiredAt).toLocaleDateString()}`;
                     } else {
                         dateInfo = `異動日: ${new Date(data.obtainedAt).toLocaleDateString()}`;
                     }
 
-                    htmlContent += `
-                        <li>
-                            <strong>${pointStr} 點</strong> - ${statusTxt}${data.remark ? ' ('+data.remark+')' : ''}<br>
-                            <small>${dateInfo}</small>
-                        </li>`;
+                    htmlContent += `<li><strong>${pointStr} 點</strong> - ${statusTxt}${data.remark ? ' ('+data.remark+')' : ''}<br><small>${dateInfo}</small></li>`;
                 });
-                
                 historyListEl.innerHTML = htmlContent || "<li>目前尚無有效的點數歷史紀錄</li>";
             } catch (e) { historyListEl.innerHTML = "<li>明細載入失敗</li>"; }
         }
@@ -142,13 +149,13 @@
         // 店員端專用核心函式
         // ==========================================
         function startScan() {
-            document.getElementById('staff-status').innerText = "安全連線中，正在喚醒相機...";
+            document.getElementById('staff-status').innerText = "安全連線中，正喚醒相機...";
             liff.scanCodeV2()
                 .then(result => {
                     if (result && result.value) {
                         targetUserId = result.value;
                         document.getElementById('action-panel').style.display = "block";
-                        document.getElementById('staff-status').innerText = "掃描成功！已載入會員面板。";
+                        document.getElementById('staff-status').innerText = "掃描成功！開始會員點數設定。";
                         fetchCustomerInfo(targetUserId);
                     }
                 })
@@ -225,21 +232,106 @@
 
                 let newPoints = currentPoints + pointsChange;
                 await setDoc(userDocRef, { totalPoints: newPoints < 0 ? 0 : newPoints }, { merge: true });
-                showCustomAlert("操作成功！最新餘額：" + (newPoints < 0 ? 0 : newPoints));
+                showCustomAlert("操作成功！點數餘額：" + (newPoints < 0 ? 0 : newPoints));
                 document.getElementById('action-panel').style.display = "none";
-                
-                // 發點成功後，自動重新整理顧客歷史明細
                 loadPointHistory(targetUserId);
             } catch (e) { showCustomAlert("雲端寫入失敗"); }
         }
 
-        window.startScan = startScan; window.changePoints = changePoints; window.setExpireDays = setExpireDays; window.confirmSubmit = confirmSubmit; window.closeCustomAlert = closeCustomAlert; window.handleTitleClick = handleTitleClick;
+        // ==========================================
+        // 大老闆端專用核心功能 
+        // ==========================================
+        async function loadAllCustomers() {
+            const listEl = document.getElementById('boss-customer-list');
+            listEl.innerHTML = "<div style='text-align:center; padding:15px; color:#a18b8f;'>正在撈取全店會員總冊...</div>";
+            try {
+                const userRef = collection(db, "users");
+                const querySnapshot = await getDocs(userRef);
+                if (querySnapshot.empty) { listEl.innerHTML = "<p>目前店內尚無任何會員註冊。</p>"; return; }
+                
+                let html = "";
+                querySnapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    const uid = docSnap.id;
+                    html += `
+                        <div class="customer-item">
+                            <div class="customer-info-row" onclick="toggleCustomerDetails('${uid}')">
+                                <span style="font-weight:bold; color:#6e5b5e;">👤 ${data.lineName || '未命名用戶'}</span>
+                                <span class="badge-points">${data.totalPoints || 0} 點</span>
+                            </div>
+                            <div id="details-${uid}" class="customer-details-box">
+                                <p style="margin:0 0 8px 0; font-size:11px; color:#a18b8f; word-break:break-all;">LINE UID: ${uid}</p>
+                                <ul id="log-list-${uid}" class="boss-log-list"><li>載入明細中...</li></ul>
+                            </div>
+                        </div>`;
+                });
+                listEl.innerHTML = html;
+            } catch (e) { listEl.innerHTML = "<p>會員總冊載入失敗: " + e + "</p>"; }
+        }
+
+        window.toggleCustomerDetails = async function(uid) {
+            const box = document.getElementById(`details-${uid}`);
+            if (box.style.display === "block") {
+                box.style.display = "none";
+                return;
+            }
+            box.style.display = "block";
+            const logListEl = document.getElementById(`log-list-${uid}`);
+            
+            try {
+                const logRef = collection(db, "users", uid, "point_log");
+                const q = query(logRef, orderBy("obtainedAt", "desc"));
+                const querySnapshot = await getDocs(q);
+                if (querySnapshot.empty) { logListEl.innerHTML = "<li>該會員尚無任何點數流向紀錄</li>"; return; }
+                
+                let html = "";
+                querySnapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    const logId = docSnap.id;
+                    let isCanceled = data.status === "canceled";
+                    let statusStyle = isCanceled ? "color:#a18b8f; text-decoration:line-through;" : "color:#6e5b5e;";
+                    let pointStr = data.pointsObtained > 0 ? `+${data.pointsObtained}` : `${data.pointsObtained}`;
+                    
+                    html += `
+                        <li style="${statusStyle} display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #fff0f2;">
+                            <div>
+                                <strong style="color:${data.pointsObtained > 0 ? '#c97288':'#8a7377'}">${pointStr} 點</strong> [${data.status}]<br>
+                                <small style="color:#a18b8f;">${data.remark || '無備註'} (${new Date(data.obtainedAt).toLocaleDateString()})</small>
+                            </div>
+                            ${!isCanceled ? `<button class="cancel-point-btn" onclick="cancelSinglePoint('${uid}', '${logId}', ${data.pointsObtained})">註銷此筆</button>` : '<span style="font-size:12px; color:#a18b8f;">已註銷</span>'}
+                        </li>`;
+                });
+                logListEl.innerHTML = html;
+            } catch (e) { logListEl.innerHTML = "<li>明細加載失敗</li>"; }
+        }
+
+        window.cancelSinglePoint = async function(uid, logId, pointsValue) {
+            if (!confirm(`確定要註銷這筆 [ ${pointsValue > 0 ? '+'+pointsValue : pointsValue} 點 ] 的紀錄嗎？系統將會自動重算並扣除該會員的總餘額！`)) return;
+            try {
+                const logDocRef = doc(db, "users", uid, "point_log", logId);
+                await updateDoc(logDocRef, { status: "canceled" });
+                
+                const userDocRef = doc(db, "users", uid);
+                const userDocSnap = await getDoc(userDocRef);
+                if (userDocSnap.exists()) {
+                    let currentTotal = userDocSnap.data().totalPoints || 0;
+                    let newTotal = currentTotal - pointsValue;
+                    if (newTotal < 0) newTotal = 0;
+                    await updateDoc(userDocRef, { totalPoints: newTotal });
+                }
+                
+                showCustomAlert("操作成功！點數已註銷且餘額重算。");
+                loadAllCustomers(); // 【自動校正體驗】註銷後自動刷新列表，數字才會即時更新
+            } catch (e) { showCustomAlert("最高權限寫入失敗: " + e); }
+        }
+
+        window.startScan = startScan; window.changePoints = changePoints; window.setExpireDays = setExpireDays; window.confirmSubmit = confirmSubmit; window.closeCustomAlert = closeCustomAlert; window.handleTitleClick = handleTitleClick; window.loadAllCustomers = loadAllCustomers;
     </script>
 
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center; background-color: #fffbfc; padding: 15px 10px; color: #5c4d50; }
-        .card { background-color: #fff5f6; border-radius: 16px; padding: 24px; width: 95%; max-width: 360px; margin: 0 auto 20px auto; box-shadow: 0 4px 20px rgba(240, 210, 215, 0.25); box-shadow: 0 4px 20px rgba(240, 210, 215, 0.25); box-sizing: border-box; }
-        h1, h2 { color: #c97288; font-size: 24px; margin: 5px 0; font-weight: bold; user-select: none; -webkit-user-select: none; }
+        .card { background-color: #fff5f6; border-radius: 16px; padding: 24px; width: 95%; max-width: 360px; margin: 0 auto 20px auto; box-shadow: 0 4px 20px rgba(240, 210, 215, 0.25); box-sizing: border-box; }
+        h1, h2, h3 { color: #c97288; font-size: 24px; margin: 5px 0; font-weight: bold; user-select: none; -webkit-user-select: none; }
         .user-name { font-size: 18px; font-weight: bold; margin: 12px 0; color: #6e5b5e; }
         .points-section { background-color: white; border: 2px dashed #fcdce2; border-radius: 12px; padding: 12px; margin: 18px 0; }
         .points-num { font-size: 46px; font-weight: bold; color: #c97288; }
@@ -267,6 +359,16 @@
         input:focus { outline: none; border-color: #c97288; }
         .submit-btn { width: 100%; padding: 14px; background-color: #ffeef0; color: #c97288; border: none; font-size: 16px; font-weight: bold; margin-top: 15px; border-radius: 10px; cursor: pointer; transition: background 0.2s; box-shadow: 0 2px 6px rgba(240, 210, 215, 0.15); }
         .submit-btn:hover { background-color: #ffd9e0; }
+        
+        .customer-list-container { text-align: left; margin-top: 15px; max-height: 420px; overflow-y: auto; padding-right: 4px; }
+        .customer-item { background: white; border: 1px solid #fcdce2; border-radius: 10px; margin-bottom: 10px; padding: 12px; box-shadow: 0 2px 6px rgba(240,210,215,0.1); }
+        .customer-info-row { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .badge-points { background: #ffeef0; color: #c97288; padding: 4px 10px; border-radius: 20px; font-weight: bold; font-size: 13px; }
+        .customer-details-box { display: none; margin-top: 12px; padding-top: 10px; border-top: 1px dashed #fcdce2; }
+        .boss-log-list { list-style: none; padding: 0; margin: 0; font-size: 12px; }
+        .cancel-point-btn { background: #fff0f2; color: #d9534f; border: 1px solid #fcdce2; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
+        .cancel-point-btn:hover { background: #d9534f; color: white; border-color: #d9534f; }
+
         .custom-alert-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); z-index: 9999; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; }
         .custom-alert-box { background: white; padding: 25px; border-radius: 16px; max-width: 320px; width: 100%; box-shadow: 0 10px 30px rgba(240, 210, 215, 0.3); text-align: center; animation: popIn 0.2s ease-out; }
         .custom-alert-text { font-size: 16px; font-weight: bold; color: #5c4d50; margin-bottom: 20px; line-height: 1.4; }
@@ -329,6 +431,16 @@
             </div>
             <button class="submit-btn" onclick="confirmSubmit()">確定</button>
         </div>
+    </div>
+
+    <div id="boss-view" style="display:none;" class="card">
+        <h2>最美老闆娘總管理系統</h2>
+        <div style="background:white; padding:8px; border-left:4px solid #c97288; font-size:12px; text-align:left; color:#8a7377; margin-bottom:15px;">
+            提示：點擊下方會員列可直接展開「存摺明細」，並可跨時空逐筆註銷帳目。
+        </div>
+        <button class="scan-btn" onclick="loadAllCustomers()">🔄 重新整理會員名冊</button>
+        
+        <div id="boss-customer-list" class="customer-list-container"></div>
     </div>
 
     <div id="custom-alert-overlay" class="custom-alert-overlay">
