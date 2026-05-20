@@ -140,6 +140,7 @@
                 }, 300); 
 
             } catch (e) { 
+                console.error("註銷錯誤詳情: ", e);
                 setTimeout(() => { showCustomAlert("最高權限寫入失敗，請確認 Firebase 索引是否建立完成。"); }, 300);
             }
         }
@@ -166,6 +167,7 @@
             closeDeleteMemberModal(); 
 
             try {
+                // 【核心修正點】：修正為正確的子集合路徑 (填入精準的會員 ID)
                 const logRef = collection(db, "users", pendingDeleteUid, "point_log");
                 const querySnapshot = await getDocs(logRef);
                 for (const docSnap of querySnapshot.docs) {
@@ -179,6 +181,7 @@
                 }, 300);
 
             } catch (e) {
+                console.error("刪除會員錯誤詳情: ", e);
                 setTimeout(() => { showCustomAlert("最高權限刪除失敗: " + e); }, 300);
             }
         }
@@ -380,7 +383,6 @@
                     let statusStyle = isCanceled ? "color:#a18b8f; text-decoration:line-through;" : "color:#6e5b5e;";
                     let pointStr = data.pointsObtained > 0 ? `+${data.pointsObtained}` : `${data.pointsObtained}`;
                     
-                    // 【全新中文化翻譯處理】消滅 [valid] [deducted] 字樣
                     let showStatus = "有效";
                     if (data.status === "deducted") showStatus = "已扣除";
                     if (data.status === "canceled") showStatus = "已註銷";
