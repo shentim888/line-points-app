@@ -60,7 +60,7 @@
                 document.getElementById('customer-view').style.display = "none";
                 document.getElementById('boss-view').style.display = "none";
                 document.getElementById('staff-view').style.display = "block";
-                document.getElementById('staff-status').innerText = "管理員就緒。最高相機權限已順利解鎖。";
+                document.getElementById('staff-status').innerText = "相機權限已順利解鎖。";
                 showCustomAlert("已成功切換至店家管理後台");
             }
             setTimeout(() => { customerClickCount = 0; }, 3000); 
@@ -151,13 +151,13 @@
                 }
                 
                 setTimeout(() => {
-                    showCustomAlert("最高權限操作成功！點數已順利註銷且餘額重算完畢。");
+                    showCustomAlert("點數已順利註銷且餘額重算完畢。");
                     loadAllCustomers(); 
                 }, 300); 
 
             } catch (e) { 
                 console.error(e);
-                setTimeout(() => { showCustomAlert("最高權限寫入失敗，請確認 Firebase 索引是否建立完成。"); }, 300);
+                setTimeout(() => { showCustomAlert("權限寫入失敗，請確認 Firebase 索引是否建立完成。"); }, 300);
             }
         }
 
@@ -203,7 +203,7 @@
 
             } catch (e) {
                 console.error("刪除時發生錯誤: ", e);
-                setTimeout(() => { showCustomAlert("最高權限刪除失敗: " + e.message); }, 300);
+                setTimeout(() => { showCustomAlert("權限刪除失敗: " + e.message); }, 300);
             }
         }
 
@@ -610,7 +610,7 @@
             <div class="modal-title" style="color: #d9534f;">🚨 永久刪除會員</div>
             <div id="delete-member-msg" class="modal-text" style="text-align: left; font-size: 13px;">確認刪除訊息</div>
             <div style="margin-bottom: 15px; text-align: left;">
-                <label style="font-size: 12px; font-weight: bold; color: #d9534f; display: block; margin-bottom: 5px;">請手動輸入「del」以執行最高權限：</label>
+                <label style="font-size: 12px; font-weight: bold; color: #d9534f; display: block; margin-bottom: 5px;">請手動輸入「del」以執行刪除權限：</label>
                 <input type="text" id="delete-confirm-input" placeholder="請精準輸入 del">
             </div>
             <div class="modal-btn-row">
