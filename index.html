@@ -28,7 +28,7 @@
         let customerClickCount = 0; 
         let staffClickCount = 0;    
         let pendingCancel = {}; 
-        let pendingDeleteUid = ""; // 暫存準備刪除的會員 UID
+        let pendingDeleteUid = ""; 
 
         window.onload = function() {
             liff.init({ liffId: myLiffId, withLoginOnExternalBrowser: true })
@@ -52,7 +52,7 @@
                 .catch(err => showCustomAlert("系統連線失敗，請重開 LINE 再試。"));
         };
 
-        // 階梯分流第一層：顧客端點 5 下 ➡️ 切換到店員收銀台
+        // 階梯分流第一層
         function handleCustomerTitleClick() {
             customerClickCount++;
             if (customerClickCount === 5) {
@@ -66,7 +66,7 @@
             setTimeout(() => { customerClickCount = 0; }, 3000); 
         }
 
-        // 階梯分流第二層：店員端再點 5 下 ➡️ 觸發老闆娘密碼框
+        // 階梯分流第二層
         function handleStaffTitleClick() {
             staffClickCount++;
             if (staffClickCount === 5) {
@@ -84,6 +84,7 @@
             document.getElementById('custom-alert-overlay').style.display = "none";
         }
 
+        // 老闆娘登入
         function showBossLoginModal() {
             document.getElementById('boss-pass-input').value = ""; 
             document.getElementById('boss-login-overlay').style.display = "flex";
@@ -107,6 +108,7 @@
             }
         }
 
+        // 註銷單筆確認圖層
         function showCancelConfirmModal(uid, logId, pointsValue) {
             pendingCancel = { uid, logId, pointsValue };
             document.getElementById('cancel-confirm-msg').innerText = `確定要註銷這筆 [ ${pointsValue > 0 ? '+'+pointsValue : pointsValue} 點 ] 的紀錄嗎？\n系統將自動扣除該會員的總餘額！`;
@@ -138,15 +140,15 @@
                 }, 300); 
 
             } catch (e) { 
-                setTimeout(() => { showCustomAlert("最高權限寫入失敗，請重試。"); }, 300);
+                setTimeout(() => { showCustomAlert("最高權限寫入失敗，請確認 Firebase 索引是否建立完成。"); }, 300);
             }
         }
 
-        // 大老闆娘刪除會員圖層開關
+        // 永久刪除會員圖層
         function showDeleteMemberModal(uid, name) {
             pendingDeleteUid = uid;
             document.getElementById('delete-member-msg').innerText = `⚠️ 警告：您即將永久刪除會員【 ${name} 】！\n此操作將一併刪除該會員的所有歷史點數且無法復原。`;
-            document.getElementById('delete-confirm-input').value = ""; // 清空輸入框
+            document.getElementById('delete-confirm-input').value = ""; 
             document.getElementById('delete-member-overlay').style.display = "flex";
         }
         function closeDeleteMemberModal() {
@@ -155,29 +157,25 @@
         }
         async function executeDeleteMember() {
             const inputTxt = document.getElementById('delete-confirm-input').value.trim();
-            // 【全新精簡】改為驗證 del 三個英文字母
             if (inputTxt !== "del") {
                 showCustomAlert("防呆驗證碼輸入錯誤，取消刪除操作！");
                 return;
             }
             if (!pendingDeleteUid) return;
 
-            closeDeleteMemberModal(); // 先關閉對話框
+            closeDeleteMemberModal(); 
 
             try {
-                // 1. 刪除子集合 point_log 內的所有歷史文件
                 const logRef = collection(db, "users", pendingDeleteUid, "point_log");
                 const querySnapshot = await getDocs(logRef);
                 for (const docSnap of querySnapshot.docs) {
                     await deleteDoc(doc(db, "users", pendingDeleteUid, "point_log", docSnap.id));
                 }
-
-                // 2. 刪除主檔案 user 文件
                 await deleteDoc(doc(db, "users", pendingDeleteUid));
 
                 setTimeout(() => {
                     showCustomAlert("該會員資料已從雲端全面永久刪除！");
-                    loadAllCustomers(); // 刷新會員總冊
+                    loadAllCustomers(); 
                 }, 300);
 
             } catch (e) {
@@ -185,9 +183,7 @@
             }
         }
 
-        // ==========================================
-        // 顧客端專用核心函式
-        // ==========================================
+        // 載入顧客資料
         async function checkAndCreateUserWallet(userId, userName) {
             const pointsEl = document.getElementById('points-display');
             try {
@@ -240,9 +236,7 @@
             } catch (e) { historyListEl.innerHTML = "<li>明細載入失敗</li>"; }
         }
 
-        // ==========================================
-        // 店員端專用核心函式
-        // ==========================================
+        // 店員端功能
         function startScan() {
             document.getElementById('staff-status').innerText = "安全連線中，正在喚醒相機...";
             liff.scanCodeV2()
@@ -386,10 +380,16 @@
                     let statusStyle = isCanceled ? "color:#a18b8f; text-decoration:line-through;" : "color:#6e5b5e;";
                     let pointStr = data.pointsObtained > 0 ? `+${data.pointsObtained}` : `${data.pointsObtained}`;
                     
+                    // 【全新中文化翻譯處理】消滅 [valid] [deducted] 字樣
+                    let showStatus = "有效";
+                    if (data.status === "deducted") showStatus = "已扣除";
+                    if (data.status === "canceled") showStatus = "已註銷";
+                    if (data.status === "used") showStatus = "已使用";
+
                     html += `
                         <li style="${statusStyle} display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #fff0f2;">
                             <div>
-                                <strong style="color:${data.pointsObtained > 0 ? '#c97288':'#8a7377'}">${pointStr} 點</strong> [${data.status}]<br>
+                                <strong style="color:${data.pointsObtained > 0 ? '#c97288':'#8a7377'}">${pointStr} 點</strong> [${showStatus}]<br>
                                 <small style="color:#a18b8f;">${data.remark || '無備註'} (${new Date(data.obtainedAt).toLocaleDateString()})</small>
                             </div>
                             ${!isCanceled ? `
@@ -456,7 +456,6 @@
         .cancel-point-btn { background: #fff0f2; color: #d9534f; border: 1px solid #fcdce2; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
         .cancel-point-btn:hover { background: #d9534f; color: white; border-color: #d9534f; }
         
-        /* 永久刪除會員按鈕視覺樣式 */
         .delete-user-master-btn { width: 100%; margin-top: 15px; padding: 10px; background-color: #fff0f1; color: #d9534f; border: 1px dashed #fcdce2; border-radius: 8px; font-size: 12px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
         .delete-user-master-btn:hover { background-color: #fce4e4; }
 
@@ -545,7 +544,7 @@
     <div id="boss-view" style="display:none;" class="card">
         <h2>最美老闆娘後台系統</h2>
         <div style="background:white; padding:8px; border-left:4px solid #c97288; font-size:12px; text-align:left; color:#8a7377; margin-bottom:15px;">
-            提示：點擊下方會員列可直接展開「點數明細」，並可逐筆註銷帳目。
+            提示：點擊下方會員列可直接展開「點數明細」，並可跨時空逐筆註銷帳目。
         </div>
         <button class="scan-btn" onclick="loadAllCustomers()">🔄 重新整理會員名冊</button>
         
