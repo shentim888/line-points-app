@@ -27,7 +27,7 @@
         let targetUserId = ""; 
         let customerClickCount = 0; 
         let staffClickCount = 0;    
-        let pendingCancel = {}; 
+        let pendingCancel = {}; // 確保初始是個乾淨物件
         let pendingDeleteUid = ""; 
 
         window.onload = function() {
@@ -108,9 +108,13 @@
             }
         }
 
-        // 註銷單筆確認圖層
+        // 【精準修正 1】：彈出註銷確認框時，確保所有欄位被死死綁定
         function showCancelConfirmModal(uid, logId, pointsValue) {
-            pendingCancel = { uid, logId, pointsValue };
+            pendingCancel = { 
+                uid: String(uid), 
+                logId: String(logId), 
+                pointsValue: parseInt(pointsValue) 
+            };
             document.getElementById('cancel-confirm-msg').innerText = `確定要註銷這筆 [ ${pointsValue > 0 ? '+'+pointsValue : pointsValue} 點 ] 的紀錄嗎？\n系統將自動扣除該會員的總餘額！`;
             document.getElementById('cancel-confirm-overlay').style.display = "flex";
         }
@@ -118,18 +122,30 @@
             document.getElementById('cancel-confirm-overlay').style.display = "none";
             pendingCancel = {}; 
         }
+        
+        // 【精準修正 2】：徹底解決地址 undefined 的 Bug
         async function executeCancelPoint() {
-            if (!pendingCancel.uid || !pendingCancel.logId) return;
+            if (!pendingCancel.uid || !pendingCancel.logId) {
+                showCustomAlert("系統地址解析失敗，請重新整理著名冊再試。");
+                closeCancelConfirmModal();
+                return;
+            }
+            
+            const targetUid = pendingCancel.uid;
+            const targetLogId = pendingCancel.logId;
+            const pVal = pendingCancel.pointsValue;
+            
             closeCancelConfirmModal(); 
+            
             try {
-                const logDocRef = doc(db, "users", pendingCancel.uid, "point_log", pendingCancel.logId);
+                const logDocRef = doc(db, "users", targetUid, "point_log", targetLogId);
                 await updateDoc(logDocRef, { status: "canceled" });
                 
-                const userDocRef = doc(db, "users", pendingCancel.uid);
+                const userDocRef = doc(db, "users", targetUid);
                 const userDocSnap = await getDoc(userDocRef);
                 if (userDocSnap.exists()) {
                     let currentTotal = userDocSnap.data().totalPoints || 0;
-                    let newTotal = currentTotal - pendingCancel.pointsValue;
+                    let newTotal = currentTotal - pVal;
                     if (newTotal < 0) newTotal = 0;
                     await updateDoc(userDocRef, { totalPoints: newTotal });
                 }
@@ -140,8 +156,8 @@
                 }, 300); 
 
             } catch (e) { 
-                console.error("註銷錯誤詳情: ", e);
-                setTimeout(() => { showCustomAlert("最高權限寫入失敗，請確認 Firebase 索引是否建立完成。"); }, 300);
+                console.error("底層錯誤分析: ", e);
+                setTimeout(() => { showCustomAlert("最高權限寫入失敗，請重試。"); }, 300);
             }
         }
 
@@ -167,7 +183,6 @@
             closeDeleteMemberModal(); 
 
             try {
-                // 【核心修正點】：修正為正確的子集合路徑 (填入精準的會員 ID)
                 const logRef = collection(db, "users", pendingDeleteUid, "point_log");
                 const querySnapshot = await getDocs(logRef);
                 for (const docSnap of querySnapshot.docs) {
@@ -181,7 +196,6 @@
                 }, 300);
 
             } catch (e) {
-                console.error("刪除會員錯誤詳情: ", e);
                 setTimeout(() => { showCustomAlert("最高權限刪除失敗: " + e); }, 300);
             }
         }
@@ -357,7 +371,7 @@
                         </div>`;
                 });
                 listEl.innerHTML = html;
-            } catch (e) { listEl.innerHTML = "<p>會員總冊載入失敗: " + e + "</p>"; }
+            } catch (e) { listRef.innerHTML = "<p>會員總冊載入失敗</p>"; }
         }
 
         window.toggleCustomerDetails = async function(uid) {
