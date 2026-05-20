@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的會員集點卡</title>
+    <title>會員數位集點卡</title>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -12,24 +12,20 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // ========================================================
-        // 【設定 1】請貼上你的 Firebase 金鑰
-        // ========================================================
+        // 已自動代入專屬 Firebase 金鑰
         const firebaseConfig = {
-        apiKey: "AIzaSyAqsN1y3eNHtQ4PiYpWIuxZC8eN6o0bK24",
-        authDomain: "line-loyalty-card.firebaseapp.com",
-        projectId: "line-loyalty-card",
-        storageBucket: "line-loyalty-card.firebasestorage.app",
-        messagingSenderId: "284106917293",
-        appId: "1:284106917293:web:2675c8c6dfe4d4d27e4d24"
+            apiKey: "AIzaSyAqsN1y3eNHtQ4PiYpWIuxZC8eN6o0bK24",
+            authDomain: "line-loyalty-card.firebaseapp.com",
+            projectId: "line-loyalty-card",
+            storageBucket: "line-loyalty-card.firebasestorage.app",
+            messagingSenderId: "284106917293",
+            appId: "1:284106917293:web:2675c8c6dfe4d4d27e4d24"
         };
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // ========================================================
-        // 【設定 2】請貼上你的 LINE LIFF ID
-        // ========================================================
+        // 已自動代入第一個（顧客端）LINE LIFF ID
         const myLiffId = '2010135064-mXyTOHst'; 
 
         window.onload = function() {
@@ -46,13 +42,8 @@
                                 document.getElementById('username').innerText = "嗨！ " + userName;
                                 document.getElementById('username').classList.remove('loading');
 
-                                // 1. 執行開戶檢查與載入點數
                                 checkAndCreateUserWallet(userId, userName);
-
-                                // 2. 【核心功能】把客人的 UID 變成 QR Code
                                 generateMemberQRCode(userId);
-
-                                // 3. 載入客人的歷史明細
                                 loadPointHistory(userId);
                             })
                             .catch(err => console.error('抓取 LINE 失敗', err));
@@ -85,29 +76,25 @@
             }
         }
 
-        // 核心：生成會員 QR Code
+        // 生成會員 QR Code
         function generateMemberQRCode(userId) {
-            // 清空原本的欄位（防重複生成）
             document.getElementById("qrcode").innerHTML = "";
-            
-            // 使用套件在網頁畫面上塞入一張包含客戶 UID 的 QR Code
             new QRCode(document.getElementById("qrcode"), {
-                text: userId,         // 這張條碼掃出來的內容就是客人的 LINE UID
-                width: 180,           // 寬度 180 像素
-                height: 180,          // 高度 180 像素
+                text: userId,         
+                width: 180,           
+                height: 180,          
                 colorDark : "#000000",
                 colorLight : "#ffffff",
                 correctLevel : QRCode.CorrectLevel.H
             });
         }
 
-        // 核心：載入點數明細給客戶看
+        // 載入點數明細
         async function loadPointHistory(userId) {
             const historyListEl = document.getElementById('history-list');
             historyListEl.innerHTML = "<li>明細載入中...</li>";
 
             try {
-                // 去資料庫撈取歷史紀錄，按照時間由新到舊排序
                 const logRef = collection(db, "users", userId, "point_log");
                 const q = query(logRef, orderBy("obtainedAt", "desc"));
                 const querySnapshot = await getDocs(q);
@@ -127,12 +114,10 @@
                     if (data.status === "used") statusTxt = "已使用";
                     if (data.status === "canceled") statusTxt = "已註銷(發錯扣回)";
                     
-                    // 檢查是否過期
                     if (data.status === "valid" && new Date() > new Date(data.expiredAt)) {
                         statusTxt = "已過期";
                     }
 
-                    // 判斷正負數符號
                     let pointStr = data.pointsObtained > 0 ? `+${data.pointsObtained}` : `${data.pointsObtained}`;
                     let remarkStr = data.remark ? ` (${data.remark})` : "";
 
@@ -159,12 +144,8 @@
         .user-name { font-size: 18px; font-weight: bold; margin: 10px 0; color: #111; }
         .points-section { background-color: #eafaea; border: 2px dashed #2cb42c; border-radius: 10px; padding: 10px; margin: 15px 0; }
         .points-num { font-size: 42px; font-weight: bold; color: #2cb42c; line-height: 1.2; }
-        
-        /* QR Code 區塊樣式 */
         .qrcode-section { margin: 20px auto; padding: 10px; background: #fff; width: 180px; height: 180px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); border-radius: 5px; }
         .qrcode-tip { font-size: 13px; color: #e67e22; font-weight: bold; margin-bottom: 15px; }
-
-        /* 歷史明細區塊樣式 */
         .history-section { background-color: white; border-radius: 15px; padding: 20px; width: 90%; max-width: 360px; margin: 0 auto; box-shadow: 0 4px 8px rgba(0,0,0,0.1); text-align: left; box-sizing: border-box; }
         .history-section h3 { margin-top: 0; color: #555; border-bottom: 1px solid #eee; padding-bottom: 8px; font-size: 16px; }
         .history-list { list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto; }

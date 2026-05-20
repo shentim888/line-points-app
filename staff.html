@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>鑫雅官方管理後台</title>
+    <title>官方管理後台</title>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, doc, getDoc, setDoc, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // 已自動為您代入專屬 Firebase 金鑰
+        // 已自動代入專屬 Firebase 金鑰
         const firebaseConfig = {
             apiKey: "AIzaSyAqsN1y3eNHtQ4PiYpWIuxZC8eN6o0bK24",
             authDomain: "line-loyalty-card.firebaseapp.com",
@@ -23,10 +23,12 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // 已自動為您代入專屬 LINE LIFF ID
-        const myLiffId = '2010135064-mXyTOHst'; 
+        // =====================================================================
+        // 【重要：請替換！】請把下方單引號內換成你剛在 LINE 後台建立的「第二個店員專用 LIFF ID」
+        // =====================================================================
+        const myLiffId = '2010135064-lM6MfuUb'; 
 
-        let targetUserId = ""; // 儲存掃描到的客人 UID
+        let targetUserId = ""; 
 
         window.onload = function() {
             liff.init({ liffId: myLiffId })
@@ -42,21 +44,19 @@
                 });
         };
 
-        // 【核心功能】開啟 LINE 相機掃描客人的 QR Code
+        // 開啟 LINE 相機掃描客人的 QR Code
         function startScan() {
             if (!liff.isFeatureSupported('scanCodeV2')) {
-                alert("目前裝置或 LINE 版本不支援 scanCodeV2 相機功能，請確保在手機 LINE 內打開此網頁，並確認後台已開啟 Scan Code 功能。");
+                alert("目前裝置或 LINE 版本不支援 scanCodeV2 相機功能，請確保使用官方魔法連結(liff.line.me)在 LINE APP 內打開此網頁。");
                 return;
             }
 
             liff.scanCodeV2()
                 .then(result => {
                     if (result.value) {
-                        targetUserId = result.value; // 拿到客人的 UID
+                        targetUserId = result.value; 
                         document.getElementById('scanned-uid').value = targetUserId;
-                        document.getElementById('action-panel').style.display = "block"; // 秀出操作面板
-                        
-                        // 去資料庫撈取這個 UID 的客人名字
+                        document.getElementById('action-panel').style.display = "block"; 
                         fetchCustomerInfo(targetUserId);
                     }
                 })
@@ -82,7 +82,7 @@
             }
         }
 
-        // 點數「加、減」按鈕的網頁操作
+        // 點數「加、減」按鈕
         function changePoints(amount) {
             const input = document.getElementById('points-input');
             let current = parseInt(input.value) || 0;
@@ -90,7 +90,7 @@
             input.value = next;
         }
 
-        // 快捷天數切換邏輯
+        // 快捷天數切換
         function setExpireDays(days) {
             const customInput = document.getElementById('custom-days-input');
             if (days === 'custom') {
@@ -102,7 +102,7 @@
             }
         }
 
-        // 【核心功能】確認送出發放/扣除點數
+        // 確認送出發放/扣除點數
         async function confirmSubmit() {
             if (!targetUserId) { alert("請先掃描客人的 QR Code！"); return; }
             
@@ -113,7 +113,6 @@
             if (pointsToAdd === 0) { alert("點數不能為 0"); return; }
             if (staffPass !== "1234") { alert("管理密碼錯誤！"); return; }
 
-            // 計算到期日
             const daysInput = document.getElementById('custom-days-input').value;
             const days = parseInt(daysInput) || 30;
             const now = new Date();
@@ -123,7 +122,6 @@
             document.getElementById('staff-status').innerText = "正與雲端通訊中...";
 
             try {
-                // 1. 寫入流水帳日誌 (point_log)
                 const logRef = collection(db, "users", targetUserId, "point_log");
                 await addDoc(logRef, {
                     pointsObtained: pointsToAdd,
@@ -133,7 +131,6 @@
                     remark: remark || (pointsToAdd > 0 ? "店員發放" : "店員扣除")
                 });
 
-                // 2. 更新使用者總點數
                 const userDocRef = doc(db, "users", targetUserId);
                 const userDocSnap = await getDoc(userDocRef);
                 let currentPoints = 0;
@@ -145,7 +142,7 @@
                 }
 
                 let newPoints = currentPoints + pointsToAdd;
-                if (newPoints < 0) newPoints = 0; // 防呆：點數最低為 0 點
+                if (newPoints < 0) newPoints = 0; 
 
                 await setDoc(userDocRef, { 
                     totalPoints: newPoints,
@@ -165,7 +162,6 @@
             }
         }
 
-        // 綁定全域函式讓 HTML 按鈕可以呼叫
         window.startScan = startScan;
         window.changePoints = changePoints;
         window.setExpireDays = setExpireDays;
@@ -179,26 +175,19 @@
         .scan-btn { width: 100%; padding: 15px; background-color: #2cb42c; color: white; border: none; border-radius: 8px; font-size: 18px; cursor: pointer; font-weight: bold; margin: 15px 0; }
         .scan-btn:hover { background-color: #249424; }
         .status-box { background: #f8f9fa; border-left: 4px solid #1a73e8; padding: 10px; font-size: 13px; color: #666; text-align: left; margin-bottom: 15px; }
-        
-        /* 操作面板樣式 */
         .panel { display: none; border-top: 2px dashed #ccc; padding-top: 15px; margin-top: 15px; text-align: left; }
         .customer-title { font-size: 16px; font-weight: bold; color: #333; margin-bottom: 15px; background: #e8f0fe; padding: 8px; border-radius: 5px; }
         .form-group { margin-bottom: 15px; }
         label { display: block; font-size: 14px; font-weight: bold; margin-bottom: 5px; color: #555; }
-        
-        /* 點數加減計數器 */
         .counter-box { display: flex; align-items: center; }
         .btn-counter { width: 45px; height: 40px; background: #ddd; border: none; font-size: 20px; font-weight: bold; cursor: pointer; }
         .btn-counter:first-child { border-radius: 5px 0 0 5px; }
         .btn-counter:last-child { border-radius: 0 5px 5px 0; }
         .input-points { width: 70px; height: 40px; text-align: center; font-size: 18px; font-weight: bold; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; border-left: none; border-right: none; box-sizing: border-box; }
-        
-        /* 期限單選鈕 */
         .radio-group { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px; }
         .radio-btn { background: #fff; border: 1px solid #ccc; padding: 8px 12px; border-radius: 5px; font-size: 13px; cursor: pointer; }
         .radio-btn input { display: none; }
         .radio-btn:has(input:checked) { background: #1a73e8; color: white; border-color: #1a73e8; }
-        
         input[type="text"], input[type="password"], input[type="number"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; font-size: 15px; }
         .submit-btn { width: 100%; padding: 12px; background-color: #1a73e8; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 15px; }
     </style>
@@ -206,7 +195,7 @@
 <body>
 
     <div class="admin-box">
-        <h2>鑫雅集點管理端</h2>
+        <h2>集點管理端後台</h2>
         <div id="staff-status" class="status-box">正在啟動 LINE 權限...</div>
         
         <button class="scan-btn" onclick="startScan()">📷 開啟相機 掃描會員</button>
@@ -237,7 +226,7 @@
             </div>
 
             <div class="form-group">
-                <label>異動備註原因 (如：消費滿百、兌換咖啡、發錯扣回)：</label>
+                <label>異動備註原因 (如：消費滿百、兌換商品、發錯扣回)：</label>
                 <input type="text" id="remark-input" placeholder="請填寫原因明細以防爭議">
             </div>
 
