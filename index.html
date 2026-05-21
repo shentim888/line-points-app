@@ -145,7 +145,6 @@
                 const userDocSnap = await getDoc(userDocRef);
                 if (userDocSnap.exists()) {
                     let currentTotal = userDocSnap.data().totalPoints || 0;
-                    // 【精準校正】：直接相減，不再強制攔截歸零，允許產生真實負值
                     let newTotal = currentTotal - pVal;
                     await updateDoc(userDocRef, { totalPoints: newTotal });
                 }
@@ -302,18 +301,28 @@
             document.getElementById('custom-days-input').value = days === 'custom' ? "30" : days;
         }
 
+        // 【核心修正】：完美攔截連擊重複扣點 Bug
         async function confirmSubmit() {
+            const submitBtn = document.getElementById('staff-submit-btn');
+            
+            // 檢查按鈕是否已經進入鎖定狀態，如果是就直接攔截
+            if (submitBtn.disabled) return;
+
             const pointsChange = parseInt(document.getElementById('points-input').value);
             const remark = document.getElementById('remark-input').value.trim();
             if (pointsChange === 0) { showCustomAlert("點數不能為 0"); return; }
             if (document.getElementById('staff-pass').value !== "0412") { showCustomAlert("管理密碼錯誤！"); return; }
             if (pointsChange < 0 && !remark) { showCustomAlert("扣點時，必須填寫備註原因！"); return; }
 
+            // 【下安全鎖】：一秒將按鈕反灰、字體改為寫入中、並啟動 disabled 狀態阻斷後續點擊
+            submitBtn.disabled = true;
+            submitBtn.innerText = "雲端同步中...";
+            submitBtn.classList.add('btn-disabled');
+
             try {
                 const userDocRef = doc(db, "users", targetUserId);
                 const userDocSnap = await getDoc(userDocRef);
                 let currentPoints = userDocSnap.exists() ? (userDocSnap.data().totalPoints || 0) : 0;
-                // 【精準校正】：允許店員端操作後產生負值（例如強制校正帳目扣點）
                 let newPoints = currentPoints + pointsChange;
 
                 const now = new Date();
@@ -348,7 +357,14 @@
                 showCustomAlert("操作成功！最新餘額：" + newPoints);
                 document.getElementById('action-panel').style.display = "none";
                 loadPointHistory(targetUserId);
-            } catch (e) { showCustomAlert("雲端寫入失敗"); }
+            } catch (e) { 
+                showCustomAlert("雲端寫入失敗"); 
+            } finally {
+                // 【解除安全鎖】：不論成功或失敗，面板收回時都把按鈕回復初始狀態
+                submitBtn.disabled = false;
+                submitBtn.innerText = "確定";
+                submitBtn.classList.remove('btn-disabled');
+            }
         }
 
         // 載入全店會員
@@ -471,6 +487,9 @@
         .submit-btn { width: 100%; padding: 14px; background-color: #ffeef0; color: #c97288; border: none; font-size: 16px; font-weight: bold; margin-top: 15px; border-radius: 10px; cursor: pointer; transition: background 0.2s; box-shadow: 0 2px 6px rgba(240, 210, 215, 0.15); }
         .submit-btn:hover { background-color: #ffd9e0; }
         
+        /* 鎖定按鈕時的反灰視覺效果 */
+        .btn-disabled { background-color: #e0e0e0 !important; color: #a0a0a0 !important; border: 1px solid #d0d0d0 !important; cursor: not-allowed !important; box-shadow: none !important; }
+        
         .customer-list-container { text-align: left; margin-top: 15px; max-height: 420px; overflow-y: auto; padding-right: 4px; }
         .customer-item { background: white; border: 1px solid #fcdce2; border-radius: 10px; margin-bottom: 10px; padding: 12px; box-shadow: 0 2px 6px rgba(240,210,215,0.1); }
         .customer-info-row { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
@@ -560,7 +579,7 @@
                 <input type="password" id="staff-pass" placeholder="請輸入後台密碼">
             </div>
             <div style="margin-top: 15px;">
-                <button class="submit-btn" onclick="confirmSubmit()">確定</button>
+                <button id="staff-submit-btn" class="submit-btn" onclick="confirmSubmit()">確定</button>
             </div>
         </div>
     </div>
