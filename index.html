@@ -60,7 +60,15 @@
                 document.getElementById('customer-view').style.display = "none";
                 document.getElementById('boss-view').style.display = "none";
                 document.getElementById('staff-view').style.display = "block";
-                document.getElementById('staff-status').innerText = "相機權限已順利解鎖。";
+                
+                // 【核心修正點】：進後台時，僅更新狀態提示文字，不呼叫啟動相機的 startScan()
+                document.getElementById('staff-status').innerText = "管理後台已就緒。請點擊下方按鈕開始掃描。";
+                
+                // 常駐面板狀態初始化
+                targetUserId = ""; 
+                document.getElementById('customer-name-display').innerText = "請掃描客戶QR code";
+                toggleFormFields(1); 
+                
                 showCustomAlert("已成功切換至店家管理後台");
             }
             setTimeout(() => { customerClickCount = 0; }, 3000); 
@@ -241,7 +249,6 @@
                     let statusTxt = "有效";
                     if (data.status === "deducted") statusTxt = "已扣除";
                     if (data.status === "canceled") statusTxt = "已註銷";
-                    // 核心防線：如果今天大於過期日，前台直接封印顯示已過期
                     if (data.status === "valid" && new Date() > new Date(data.expiredAt)) statusTxt = "已過期";
 
                     let pointStr = data.pointsObtained > 0 ? `+${data.pointsObtained}` : `${data.pointsObtained}`;
@@ -259,14 +266,14 @@
             } catch (e) { historyListEl.innerHTML = "<li>明細載入失敗</li>"; }
         }
 
+        // 只有點選此按鈕，才會受控啟動相機
         function startScan() {
             document.getElementById('staff-status').innerText = "安全連線中，正在喚醒相機...";
             liff.scanCodeV2()
                 .then(result => {
                     if (result && result.value) {
                         targetUserId = result.value;
-                        document.getElementById('action-panel').style.display = "block";
-                        document.getElementById('staff-status').innerText = "掃描成功！已載入會員面板。";
+                        document.getElementById('staff-status').innerText = "掃描成功！已順利綁定會員。";
                         fetchCustomerInfo(targetUserId);
                     }
                 })
@@ -295,7 +302,6 @@
             toggleFormFields(next);
         }
 
-        // 智慧分流表單：自動切換正值(加點)與負值(扣點)畫面
         function toggleFormFields(value) {
             const expiryGroup = document.getElementById('expiry-group');
             const remarkAddGroup = document.getElementById('remark-add-group');
@@ -304,12 +310,12 @@
             if (value < 0) {
                 expiryGroup.style.display = "none";
                 remarkAddGroup.style.display = "none";
-                remarkDeductGroup.style.display = "block"; // 開啟扣點三大按鈕
-                setDeductRemark('兌換券'); // 預設勾選第一個
+                remarkDeductGroup.style.display = "block"; 
+                setDeductRemark('兌換券'); 
                 document.getElementById('rb-deduct-1').checked = true;
             } else {
                 expiryGroup.style.display = "block";
-                remarkAddGroup.style.display = "block"; // 開啟一般加點填寫欄
+                remarkAddGroup.style.display = "block"; 
                 remarkDeductGroup.style.display = "none";
                 document.getElementById('remark-input-add').value = ""; 
             }
@@ -320,7 +326,6 @@
             document.getElementById('custom-days-input').value = days === 'custom' ? "30" : days;
         }
 
-        // 扣點按鈕控制邏輯
         function setDeductRemark(type) {
             const customBox = document.getElementById('custom-remark-deduct-box');
             if (type === 'custom') {
@@ -329,12 +334,17 @@
                 customBox.focus();
             } else {
                 customBox.style.display = "none";
-                customBox.value = type; // 將按鈕對應的文字塞入隱藏欄位
+                customBox.value = type; 
             }
         }
 
         // 核心提交
         async function confirmSubmit() {
+            if (!targetUserId) {
+                showCustomAlert("操作失敗！請先點擊上方「📷 掃描會員」讀取客人的條碼。");
+                return;
+            }
+
             const submitBtn = document.getElementById('staff-submit-btn');
             if (submitBtn.disabled) return;
 
@@ -342,10 +352,8 @@
             if (pointsChange === 0) { showCustomAlert("點數不能為 0"); return; }
             if (document.getElementById('staff-pass').value !== "0412") { showCustomAlert("管理密碼錯誤！"); return; }
 
-            // 解析最終得到的備註文字
             let finalRemark = "";
             if (pointsChange < 0) {
-                // 扣點狀況下：檢查是勾選了預設按鈕還是自訂輸入
                 if (document.getElementById('rb-deduct-custom').checked) {
                     finalRemark = document.getElementById('custom-remark-deduct-box').value.trim();
                 } else if (document.getElementById('rb-deduct-1').checked) {
@@ -355,7 +363,6 @@
                 }
                 if (!finalRemark) { showCustomAlert("扣點時，必須選擇或填寫原因！"); return; }
             } else {
-                // 加點狀況下：直接抓一般文字輸入框
                 finalRemark = document.getElementById('remark-input-add').value.trim() || "店家發放";
             }
 
@@ -384,7 +391,6 @@
                     for (const pointDoc of querySnapshot.docs) {
                         if (pointsToDeduct <= 0) break;
                         const pointData = pointDoc.data();
-                        // 核心防線：如果今天大於過期日，扣點時自動跳過，不允許扣除已經過期的失效點數！
                         if (new Date() > new Date(pointData.expiredAt)) continue;
                         const singleDocRef = doc(db, "users", targetUserId, "point_log", pointDoc.id);
                         if (pointData.pointsObtained <= pointsToDeduct) {
@@ -401,13 +407,13 @@
 
                 await setDoc(userDocRef, { totalPoints: newPoints }, { merge: true });
                 showCustomAlert("操作成功！最新餘額：" + newPoints);
-                document.getElementById('action-panel').style.display = "none";
                 
-                // 還原初始狀態
+                // 成功後重置
+                targetUserId = ""; 
+                document.getElementById('customer-name-display').innerText = "請掃描客戶QR code";
                 document.getElementById('points-input').value = "1";
                 toggleFormFields(1);
 
-                loadPointHistory(targetUserId);
             } catch (e) { 
                 showCustomAlert("雲端寫入失敗"); 
             } finally {
@@ -501,7 +507,7 @@
             }
         });
 
-        window.startScan = startScan; window.changePoints = changePoints; window.setExpireDays = setExpireDays; window.confirmSubmit = confirmSubmit; window.closeCustomAlert = closeCustomAlert; window.handleCustomerTitleClick = handleCustomerTitleClick; window.handleStaffTitleClick = staffClickCount; window.handleStaffTitleClick = handleStaffTitleClick; window.loadAllCustomers = loadAllCustomers; window.closeBossLoginModal = closeBossLoginModal; window.confirmBossLogin = confirmBossLogin; window.showCancelConfirmModal = showCancelConfirmModal; window.closeCancelConfirmModal = closeCancelConfirmModal; window.executeCancelPoint = executeCancelPoint; window.showDeleteMemberModal = showDeleteMemberModal; window.closeDeleteMemberModal = closeDeleteMemberModal; window.executeDeleteMember = executeDeleteMember; window.setDeductRemark = setDeductRemark;
+        window.startScan = startScan; window.changePoints = changePoints; window.setExpireDays = setExpireDays; window.confirmSubmit = confirmSubmit; window.closeCustomAlert = closeCustomAlert; window.handleCustomerTitleClick = handleCustomerTitleClick; window.handleStaffTitleClick = handleStaffTitleClick; window.loadAllCustomers = loadAllCustomers; window.closeBossLoginModal = closeBossLoginModal; window.confirmBossLogin = confirmBossLogin; window.showCancelConfirmModal = showCancelConfirmModal; window.closeCancelConfirmModal = closeCancelConfirmModal; window.executeCancelPoint = executeCancelPoint; window.showDeleteMemberModal = showDeleteMemberModal; window.closeDeleteMemberModal = closeDeleteMemberModal; window.executeDeleteMember = executeDeleteMember; window.setDeductRemark = setDeductRemark;
     </script>
 
     <style>
@@ -521,7 +527,9 @@
         .scan-btn { width: 100%; padding: 15px; background-color: #ffeef0; color: #c97288; border: none; border-radius: 10px; font-size: 18px; cursor: pointer; font-weight: bold; margin: 15px 0; transition: background 0.2s; box-shadow: 0 2px 6px rgba(240, 210, 215, 0.15); }
         .scan-btn:hover { background-color: #ffd9e0; }
         .status-box { background: white; border-left: 4px solid #ffeef0; padding: 10px; font-size: 13px; text-align: left; color: #8a7377; border-radius: 0 4px 4px 0; }
-        .panel { display: none; border-top: 1px dashed #fcdce2; padding-top: 15px; text-align: left; }
+        
+        .panel { display: block; border-top: 1px dashed #fcdce2; padding-top: 15px; text-align: left; }
+        
         .counter-box { display: flex; align-items: center; }
         .btn-counter { width: 45px; height: 40px; background: white; border: 1px solid #fcdce2; font-size: 20px; font-weight: bold; color: #c97288; cursor: pointer; }
         .btn-counter:first-child { border-radius: 6px 0 0 6px; }
@@ -580,6 +588,8 @@
         
         .modal-btn-danger-confirm { flex: 1; background: #d9534f; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; }
         .modal-btn-danger-confirm:hover { background: #c9302c; }
+        
+        @keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
     </style>
 </head>
 <body>
@@ -603,11 +613,11 @@
 
     <div id="staff-view" style="display:none;" class="card">
         <h2 onclick="handleStaffTitleClick()" style="cursor: pointer;">店家管理後台</h2>
-        <div id="staff-status" class="status-box">權限檢查中...</div>
+        <div id="staff-status" class="status-box">管理後台已就緒。請點擊下方按鈕開始掃描。</div>
         <button class="scan-btn" onclick="startScan()">📷 掃描會員</button>
         
         <div id="action-panel" class="panel">
-            <div style="background:white; padding:10px; font-weight:bold; color: #c97288; border: 1px solid #fcdce2; border-radius: 6px; text-align: center;" id="customer-name-display">--</div>
+            <div style="background:white; padding:10px; font-weight:bold; color: #c97288; border: 1px solid #fcdce2; border-radius: 6px; text-align: center;" id="customer-name-display">請掃描客戶QR code</div>
             <div style="margin: 18px 0;">
                 <label style="font-weight:bold; display:block; margin-bottom: 8px;">發放/扣除點數：</label>
                 <div class="counter-box">
