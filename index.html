@@ -61,7 +61,6 @@
                 document.getElementById('boss-view').style.display = "none";
                 document.getElementById('staff-view').style.display = "block";
                 
-                // 【核心修正點】：進後台時，僅更新狀態提示文字，不呼叫啟動相機的 startScan()
                 document.getElementById('staff-status').innerText = "請點擊下方按鈕開始掃描。";
                 
                 // 常駐面板狀態初始化
@@ -69,7 +68,7 @@
                 document.getElementById('customer-name-display').innerText = "請掃描客戶QR code";
                 toggleFormFields(1); 
                 
-                showCustomAlert("切換至店家管理後台");
+                showCustomAlert("已成功切換至店家管理後台");
             }
             setTimeout(() => { customerClickCount = 0; }, 3000); 
         }
@@ -266,7 +265,7 @@
             } catch (e) { historyListEl.innerHTML = "<li>明細載入失敗</li>"; }
         }
 
-        // 只有點選此按鈕，才會受控啟動相機
+        // 點選此按鈕手動開啟相機
         function startScan() {
             document.getElementById('staff-status').innerText = "安全連線中，正在喚醒相機...";
             liff.scanCodeV2()
@@ -408,9 +407,9 @@
                 await setDoc(userDocRef, { totalPoints: newPoints }, { merge: true });
                 showCustomAlert("操作成功！最新餘額：" + newPoints);
                 
-                // 成功後重置
+                // 【精準同步優化】：結帳成功後，文字回歸最完美的統一規格
                 targetUserId = ""; 
-                document.getElementById('customer-name-display').innerText = "客戶名稱，請掃描QR code";
+                document.getElementById('customer-name-display').innerText = "請掃描客戶QR code";
                 document.getElementById('points-input').value = "1";
                 toggleFormFields(1);
 
@@ -588,8 +587,6 @@
         
         .modal-btn-danger-confirm { flex: 1; background: #d9534f; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; }
         .modal-btn-danger-confirm:hover { background: #c9302c; }
-        
-        @keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
     </style>
 </head>
 <body>
