@@ -103,7 +103,7 @@
                     const log = docSnap.data();
                     if (log.status === "canceled") return; 
                     let isAdd = log.pointsObtained > 0;
-                    html += `<li><strong style="color:${isAdd ? '#c97288':'#8a7377'}">${isAdd ? '+':''}${log.pointsObtained} 點</strong><br><small>${log.remark} (${new Date(log.obtainedAt).toLocaleDateString()})</small></li>`;
+                    html += `<li><strong>${isAdd ? '+':''}${log.pointsObtained} 點</strong> — ${log.remark} <small>(${new Date(log.obtainedAt).toLocaleDateString()})</small></li>`;
                 });
                 listEl.innerHTML = html;
             } catch(e) { listEl.innerHTML = "<li>點數明細載入失敗</li>"; }
@@ -119,8 +119,8 @@
                 document.getElementById('staff-view').style.display = "block";
                 
                 targetUserId = ""; 
-                document.getElementById('customer-name-display').innerText = "🌸 請掃描客戶QR code 🌸";
-                document.getElementById('staff-status').innerText = "✨ 點擊下方按鈕開始掃描。";
+                document.getElementById('customer-name-display').innerText = "請掃描客戶QR code";
+                document.getElementById('staff-status').innerText = "管理系統已就緒，請點擊上方按鈕掃描條碼。";
                 toggleFormFields(1); 
                 
                 showCustomAlert("已成功切換至店家管理後台");
@@ -224,13 +224,14 @@
             }
         };
 
+        // 店家端：📷 受控開啟官方相機，進後台時不主動開啟打擾
         window.startScan = function() {
-            document.getElementById('staff-status').innerText = "✨ 安全連線中，正在喚醒相機...";
+            document.getElementById('staff-status').innerText = "正在喚醒相機...";
             liff.scanCodeV2()
                 .then(result => {
                     if (result && result.value) {
                         targetUserId = result.value;
-                        document.getElementById('staff-status').innerText = "💖 掃描成功！已順利綁定會員。";
+                        document.getElementById('staff-status').innerText = "條碼讀取成功，已綁定該會員。";
                         fetchCustomerInfo(targetUserId);
                     }
                 })
@@ -246,7 +247,7 @@
                 const userDocSnap = await getDoc(userDocRef);
                 if (userDocSnap.exists()) {
                     const data = userDocSnap.data();
-                    document.getElementById('customer-name-display').innerText = `✨ ${data.lineName} (餘額: ${data.totalPoints || 0} 點)`;
+                    document.getElementById('customer-name-display').innerText = `${data.lineName} (餘額: ${data.totalPoints || 0} 點)`;
                 } else {
                     document.getElementById('customer-name-display').innerText = "未開戶新客";
                 }
@@ -270,7 +271,7 @@
 
         window.openShopModal = async function() {
             const grid = document.getElementById('shop-grid');
-            grid.innerHTML = "<div style='grid-column: span 2; color:#a18b8f;'>🌸 正在打開點數專區商品櫃...</div>";
+            grid.innerHTML = "<div style='grid-column: span 2; color:#a18b8f;'>正在打開點數專區商品櫃...</div>";
             document.getElementById('shop-overlay').style.display = "flex";
             
             try {
@@ -286,9 +287,9 @@
                     const displayCost = cData.cost !== undefined ? cData.cost : 0;
                     html += `
                         <div class="shop-item">
-                            <div class="shop-item-title">🎀 ${cData.name}</div>
+                            <div class="shop-item-title">${cData.name}</div>
                             <div class="shop-item-cost">所需點數：<strong>${displayCost}</strong> 點</div>
-                            <button class="shop-exchange-btn" onclick="executeExchangeCoupon('${cid}', '${dataNameSafe(cData.name)}', ${displayCost})">💖 兌換</button>
+                            <button class="shop-exchange-btn" onclick="executeExchangeCoupon('${cid}', '${dataNameSafe(cData.name)}', ${displayCost})">兌換</button>
                         </div>`;
                 });
                 grid.innerHTML = html;
@@ -345,7 +346,7 @@
                     detail: `花費 ${cost} 點兌換成功`
                 });
 
-                showCustomAlert(`🎉 成功兌換【${cName}】！\n已自餘額扣除 ${cost} 點，請於 60 天內使用完畢。`);
+                showCustomAlert(`成功兌換【${cName}】！\n已自餘額扣除 ${cost} 點，請於 60 天內使用完畢。`);
                 document.getElementById('points-display').innerText = newPoints; 
                 
                 loadPointHistory(currentLiffUserId);
@@ -357,7 +358,7 @@
 
         window.openBagModal = async function() {
             const container = document.getElementById('bag-container');
-            container.innerHTML = "<div style='color:#a18b8f;'>🌸 正在翻開您的現有優惠券口袋...</div>";
+            container.innerHTML = "<div style='color:#a18b8f;'>正在翻開您的現有優惠券口袋...</div>";
             document.getElementById('bag-overlay').style.display = "flex";
             if (!currentLiffUserId) return;
 
@@ -374,8 +375,8 @@
                     html += `
                         <div class="bag-item">
                             <div style="text-align:left; max-width: 65%;">
-                                <div class="bag-item-title">🎀 ${wData.name}</div>
-                                <div class="bag-item-date">🌸 有效期至: ${new Date(wData.expiredAt).toLocaleDateString()}</div>
+                                <div class="bag-item-title">${wData.name}</div>
+                                <div class="bag-item-date">有效期至: ${new Date(wData.expiredAt).toLocaleDateString()}</div>
                             </div>
                             <button class="bag-use-btn" onclick="showUseCouponConfirmModal('${wid}', '${dataNameSafe(wData.name)}')">立即使用</button>
                         </div>`;
@@ -414,7 +415,7 @@
                     detail: "於店面現場成功核銷使用"
                 });
 
-                showCustomAlert(`✅【${targetName}】核銷成功！\n歡迎再度光臨！`);
+                showCustomAlert(`【${targetName}】核銷成功！\n歡迎再度光臨！`);
                 loadCustomerCouponHistory(currentLiffUserId);
                 closeBagModal();
             } catch(e) { showCustomAlert("核銷失敗，請重試"); }
@@ -429,8 +430,8 @@
                 let html = "";
                 qSnapshot.forEach(docSnap => {
                     const log = docSnap.data();
-                    let typeTxt = log.type === "exchange" ? "💖 兌換" : "✅ 使用";
-                    html += `<li><strong style="color:${log.type === 'exchange' ? '#c97288':'#8a7377'}">[${typeTxt}] ${log.name}</strong><br><small>${log.detail} (${new Date(log.actionAt).toLocaleDateString()})</small></li>`;
+                    let typeTxt = log.type === "exchange" ? "兌換" : "使用";
+                    html += `<li><strong>[${typeTxt}] ${log.name}</strong> — <small>${log.detail} (${new Date(log.actionAt).toLocaleDateString()})</small></li>`;
                 });
                 listEl.innerHTML = html;
             } catch(e) { listEl.innerHTML = "<li>優惠券存摺載入失敗</li>"; }
@@ -452,10 +453,10 @@
                     html += `
                         <div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid #fff0f2; background:white; margin-bottom:5px; border-radius:6px; border:1px solid #fcdce2;">
                             <div style="text-align:left; font-size:13px; max-width:70%;">
-                                <strong style="color:#6e5b5e;">🎀 ${cData.name}</strong><br>
+                                <strong>${cData.name}</strong><br>
                                 <small style="color:#c97288;">兌換代價: ${cData.cost !== undefined ? cData.cost : 0} 點</small>
                             </div>
-                            <button class="cancel-point-btn" onclick="showUnpublishCouponModal('${cid}', '${dataNameSafe(cData.name)}')">🎀 下架</button>
+                            <button class="cancel-point-btn" onclick="showUnpublishCouponModal('${cid}', '${dataNameSafe(cData.name)}')">下架</button>
                         </div>`;
                 });
                 box.innerHTML = html;
@@ -474,7 +475,7 @@
                     cost: cost,
                     createdAt: new Date().toISOString()
                 });
-                showCustomAlert(`✨ 成功上架【${name}】！`);
+                showCustomAlert(`成功上架【${name}】！`);
                 document.getElementById('coupon-name-input').value = "";
                 loadBossCouponsMaster();
             } catch(e) { showCustomAlert("上架失敗"); }
@@ -502,7 +503,7 @@
         // 帳務核銷與管理員核心
         // ==========================================
         window.confirmSubmit = async function() {
-            if (!targetUserId) { showCustomAlert("操作失敗！請先點擊上方「🌸 掃描會員」讀取客人的條碼。"); return; }
+            if (!targetUserId) { showCustomAlert("操作失敗！請先點擊上方「📷 掃描會員」讀取客人的條碼。"); return; }
             const pointsChange = parseInt(document.getElementById('points-input').value);
             if (pointsChange === 0) { showCustomAlert("點數不能為 0"); return; }
             if (document.getElementById('staff-pass').value !== "0412") { showCustomAlert("管理密碼錯誤！"); return; }
@@ -547,7 +548,7 @@
                 showCustomAlert("操作成功！最新餘額：" + newPoints);
                 
                 targetUserId = ""; 
-                document.getElementById('customer-name-display').innerText = "🌸 請掃描客戶QR code 🌸";
+                document.getElementById('customer-name-display').innerText = "請掃描客戶QR code";
                 document.getElementById('points-input').value = "1";
                 toggleFormFields(1);
             } catch (e) { showCustomAlert("雲端寫入失敗"); }
@@ -560,7 +561,7 @@
 
         async function loadAllCustomers() {
             const listEl = document.getElementById('boss-customer-list');
-            listEl.innerHTML = "<div style='text-align:center; padding:10px; color:#a18b8f;'>🌸 正在撈取會員總冊...</div>";
+            listEl.innerHTML = "<div style='text-align:center; padding:10px; color:#a18b8f;'>正在撈取會員總冊...</div>";
             try {
                 const querySnapshot = await getDocs(collection(db, "users"));
                 let html = "";
@@ -570,13 +571,13 @@
                     html += `
                         <div class="customer-item">
                             <div class="customer-info-row" onclick="toggleCustomerDetails('${uid}')">
-                                <span>🌸 ${data.lineName || '未命名'}</span>
+                                <span>${data.lineName || '未命名'}</span>
                                 <span class="badge-points">${data.totalPoints || 0} 點</span>
                             </div>
                             <div id="details-${uid}" class="customer-details-box">
                                 <p style="font-size:10px;color:#a18b8f;margin:5px 0;word-break:break-all;">LINE ID: ${uid}</p>
                                 <ul id="log-list-${uid}" class="boss-log-list"><li>載入明細中...</li></ul>
-                                <button class="delete-user-master-btn" onclick="showDeleteMemberModal('${uid}', '${dataNameSafe(data.lineName)}')">🌸 刪除會員資料</button>
+                                <button class="delete-user-master-btn" onclick="showDeleteMemberModal('${uid}', '${dataNameSafe(data.lineName)}')">刪除會員資料</button>
                             </div>
                         </div>`;
                 });
@@ -649,7 +650,7 @@
     </script>
 
     <style>
-        /* 🌸 全局基礎美化 */
+        /* 🌸 全局精品簡約化美化 */
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center; background-color: #fffbfc; padding: 15px 10px; color: #5c4d50; touch-action: manipulation; }
         .card { background-color: #fff5f6; border-radius: 16px; padding: 24px; width: 95%; max-width: 360px; margin: 0 auto 20px auto; box-shadow: 0 4px 20px rgba(240, 210, 215, 0.25); box-sizing: border-box; }
         h1, h2, h3 { color: #c97288; font-size: 24px; margin: 5px 0; font-weight: bold; user-select: none; -webkit-user-select: none; }
@@ -710,7 +711,7 @@
         .cancel-point-btn { background: #fff0f2; color: #d9534f; border: 1px solid #fcdce2; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; border: none; font-weight: bold; }
         .delete-user-master-btn { width: 100%; margin-top: 10px; padding: 8px; background-color: #fff0f1; color: #d9534f; border: 1px dashed #fcdce2; border-radius: 6px; font-size: 11px; cursor: pointer; font-weight: bold; }
         
-        /* 🔒 【終極修正核心】：補上最關鍵的獨立遮罩與彈窗樣式大括號，杜絕排版交叉感染 */
+        /* 🔒 【樣式完全獨立隔離】：補上遮罩與置中彈窗的 CSS，消滅排版相互污染 */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.55); z-index: 99999; justify-content: center; align-items: center; padding: 15px; box-sizing: border-box; backdrop-filter: blur(1px); -webkit-backdrop-filter: blur(1px); }
         .modal-box { background: white; padding: 22px 18px; border-radius: 16px; max-width: 330px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.25); text-align: center; box-sizing: border-box; max-height: 85vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
         
@@ -765,10 +766,10 @@
     <div id="staff-view" style="display:none;" class="card">
         <h2 onclick="handleStaffTitleClick()" style="cursor: pointer;">店家管理後台</h2>
         <div id="staff-status" class="status-box">✨ 請點擊下方按鈕開始掃描。</div>
-        <button class="scan-btn" onclick="startScan()">🌸 掃描會員</button>
+        <button class="scan-btn" onclick="startScan()">📷 掃描會員</button>
         
         <div id="action-panel" class="panel">
-            <div style="background:white; padding:10px; font-weight:bold; color: #c97288; border: 1px solid #fcdce2; border-radius: 6px; text-align: center;" id="customer-name-display">🌸 請掃描客戶QR code 🌸</div>
+            <div style="background:white; padding:10px; font-weight:bold; color: #c97288; border: 1px solid #fcdce2; border-radius: 6px; text-align: center;" id="customer-name-display">請掃描客戶QR code</div>
             <div style="margin: 15px 0;">
                 <label style="font-weight:bold; display:block; margin-bottom: 5px;">發放/扣除點數：</label>
                 <div class="counter-box">
@@ -789,7 +790,7 @@
             
             <div id="remark-add-group" style="margin: 15px 0;">
                 <label style="font-weight:bold; display:block; margin-bottom: 5px;">異動備註：</label>
-                <input type="text" id="remark-input-add" placeholder="例如：消費滿百、活動贈點">
+                <input type="text" id="remark-input-add" placeholder="例如：消費滿額、活動贈點">
             </div>
             
             <div id="remark-deduct-group" style="margin: 15px 0; display:none;">
@@ -856,6 +857,7 @@
     <div id="bag-overlay" class="modal-overlay">
         <div class="modal-box">
             <div class="modal-title" style="color:#8a7377;">🎀 我的現有優惠券</div>
+            <div class="modal-text" style="font-size:12px; margin-bottom:12px; color:#8a7377;">結帳時請向店員出示核銷</div>
             <div id="bag-container" class="bag-list"></div>
             <button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeBagModal()">關閉口袋</button>
         </div>
