@@ -90,7 +90,7 @@
             });
         }
 
-        // 載入客人的點數歷史紀錄 (【本次精準微調點】：發點明細後面完美加上截止日期)
+        // 載入客人的點數歷史紀錄 (【本次完美微調】：合併日期顯示為發放日 ~ 截止日)
         async function loadPointHistory(userId) {
             const listEl = document.getElementById('history-list');
             try {
@@ -104,13 +104,13 @@
                     if (log.status === "canceled") return; 
                     let isAdd = log.pointsObtained > 0;
                     
-                    // 檢查資料庫有沒有截止日期 (如果有且是加點，就秀出來，扣點通常沒有截止日)
-                    let expiryText = "";
+                    // 根據有沒有到期日，聰明決定括號內的文字呈現
+                    let dateInfo = new Date(log.obtainedAt).toLocaleDateString();
                     if (isAdd && log.expiredAt) {
-                        expiryText = `<br><small style="color: #a18b8f;">⌛ 截止日期：${new Date(log.expiredAt).toLocaleDateString()}</small>`;
+                        dateInfo += ` ~ ${new Date(log.expiredAt).toLocaleDateString()}`;
                     }
 
-                    html += `<li><strong style="color:${isAdd ? '#c97288':'#8a7377'}">${isAdd ? '+':''}${log.pointsObtained} 點</strong><br><small>${log.remark} (${new Date(log.obtainedAt).toLocaleDateString()})</small>${expiryText}</li>`;
+                    html += `<li><strong style="color:${isAdd ? '#c97288':'#8a7377'}">${isAdd ? '+':''}${log.pointsObtained} 點</strong><br><small>${log.remark} (${dateInfo})</small></li>`;
                 });
                 listEl.innerHTML = html;
             } catch(e) { listEl.innerHTML = "<li>點數明細載入失敗</li>"; }
@@ -509,7 +509,7 @@
         // 帳務核銷與管理員核心
         // ==========================================
         window.confirmSubmit = async function() {
-            if (!targetUserId) { showCustomAlert("操作失敗！請先點擊上方「🌸 掃描會員」讀取客人的條碼。"); return; }
+            if (!targetUserId) { showCustomAlert("操作失敗！請先點擊上方「📷 掃描會員」讀取客人的條碼。"); return; }
             const pointsChange = parseInt(document.getElementById('points-input').value);
             if (pointsChange === 0) { showCustomAlert("點數不能為 0"); return; }
             if (document.getElementById('staff-pass').value !== "0412") { showCustomAlert("管理密碼錯誤！"); return; }
@@ -717,6 +717,7 @@
         .cancel-point-btn { background: #fff0f2; color: #d9534f; border: 1px solid #fcdce2; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; border: none; font-weight: bold; }
         .delete-user-master-btn { width: 100%; margin-top: 10px; padding: 8px; background-color: #fff0f1; color: #d9534f; border: 1px dashed #fcdce2; border-radius: 6px; font-size: 11px; cursor: pointer; font-weight: bold; }
         
+        /* 🔒 【終極修正核心】：補上最關鍵的獨立遮罩與彈窗樣式大括號，杜絕排版交叉感染 */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.55); z-index: 99999; justify-content: center; align-items: center; padding: 15px; box-sizing: border-box; backdrop-filter: blur(1px); -webkit-backdrop-filter: blur(1px); }
         .modal-box { background: white; padding: 22px 18px; border-radius: 16px; max-width: 330px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.25); text-align: center; box-sizing: border-box; max-height: 85vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
         
@@ -831,7 +832,7 @@
             <div id="boss-customer-list" class="customer-list-container"></div>
         </div>
 
-        <div id="coupon-factory-page" style="display:none;">
+        <div class="coupon-factory-page" id="coupon-factory-page" style="display:none;">
             <div class="factory-box">
                 <h3 style="font-size:16px; color:#c97288; margin-top:0; border-bottom:1px dashed #fcdce2; padding-bottom:6px;">🌸 專區新品上架櫃台</h3>
                 <div style="margin-bottom: 10px;">
@@ -861,7 +862,7 @@
 
     <div id="bag-overlay" class="modal-overlay">
         <div class="modal-box">
-            <div class="modal-title" style="color:#8a7377;">🎀 我的現有優惠券</div>
+            <div class="modal-title">🎫 我的現有優惠券</div>
             <div id="bag-container" class="bag-list"></div>
             <button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeBagModal()">關閉口袋</button>
         </div>
@@ -912,7 +913,7 @@
         <div class="modal-box">
             <div class="modal-title" style="color: #d9534f;">🚨 永久刪除會員</div>
             <div id="delete-member-msg" class="modal-text">確認刪除訊息</div>
-            <input type="text" id="delete-confirm-input" placeholder="精準輸入 del" style="margin-top:8px; margin-bottom:5px;">
+            <input type="text" id="delete-confirm-input" placeholder="請精準輸入 del" style="margin-top:8px; margin-bottom:5px;">
             <div class="modal-btn-row">
                 <button class="modal-btn-cancel" onclick="closeDeleteMemberModal()">取消</button>
                 <button class="modal-btn-danger-confirm" onclick="executeDeleteMember()">強行永久刪除</button>
