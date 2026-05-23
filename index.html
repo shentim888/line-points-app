@@ -90,13 +90,13 @@
             });
         }
 
-        // 載入客人的點數歷史紀錄 (【本次完美微調】：合併日期顯示為發放日 ~ 截止日)
+        // 載入客人的點數歷史紀錄
         async function loadPointHistory(userId) {
             const listEl = document.getElementById('history-list');
             try {
                 const q = query(collection(db, "users", userId, "point_log"), orderBy("obtainedAt", "desc"));
                 const qSnapshot = await getDocs(q);
-                if (qSnapshot.empty) { listEl.innerHTML = "<li>目前尚無任何點數收支紀錄</li>"; return; }
+                if (qSnapshot.empty) { listEl.innerHTML = "<li>目前尚無 any 點數收支紀錄</li>"; return; }
                 
                 let html = "";
                 qSnapshot.forEach(docSnap => {
@@ -104,7 +104,6 @@
                     if (log.status === "canceled") return; 
                     let isAdd = log.pointsObtained > 0;
                     
-                    // 根據有沒有到期日，聰明決定括號內的文字呈現
                     let dateInfo = new Date(log.obtainedAt).toLocaleDateString();
                     if (isAdd && log.expiredAt) {
                         dateInfo += ` ~ ${new Date(log.expiredAt).toLocaleDateString()}`;
@@ -116,7 +115,7 @@
             } catch(e) { listEl.innerHTML = "<li>點數明細載入失敗</li>"; }
         }
 
-        // 階梯分流第一層（顧客點5下切店家）
+        // 階梯分流第一層（顧客端點5下切店家）
         window.handleCustomerTitleClick = function() {
             customerClickCount++;
             if (customerClickCount === 5) {
@@ -223,6 +222,16 @@
             }
         };
 
+        // 【本次微調擴充點 1】：新增老闆娘上架優惠券的有效期限按鈕點擊切換事件
+        window.setCouponExpireDays = function(days) {
+            if (days === 'custom') {
+                document.getElementById('custom-coupon-days-input').style.display = "block";
+            } else {
+                document.getElementById('custom-coupon-days-input').style.display = "none";
+                document.getElementById('custom-coupon-days-input').value = days;
+            }
+        };
+
         window.setDeductRemark = function(mode) {
             if (mode === 'custom') {
                 document.getElementById('custom-remark-deduct-box').style.display = "block";
@@ -307,12 +316,21 @@
             return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
         }
 
+        // 【本次微調擴充點 2】：修改客戶兌換函數，自動去資料庫撈取 validDays 進行到期日計算，不寫死 60 天
         window.executeExchangeCoupon = async function(cid, cName, cost) {
             if (!currentLiffUserId) return;
             const shopGrid = document.getElementById('shop-grid');
             shopGrid.style.pointerEvents = "none"; 
 
             try {
+                // 先確認商品在資料庫設定的自訂有效天數
+                const couponDocRef = doc(db, "coupons", cid);
+                const couponDocSnap = await getDoc(couponDocRef);
+                let targetValidDays = 60; // 預設值 60 天做安全防呆
+                if (couponDocSnap.exists() && couponDocSnap.data().validDays !== undefined) {
+                    targetValidDays = parseInt(couponDocSnap.data().validDays) || 60;
+                }
+
                 const userDocRef = doc(db, "users", currentLiffUserId);
                 const userDocSnap = await getDoc(userDocRef);
                 let currentPoints = userDocSnap.exists() ? (userDocSnap.data().totalPoints || 0) : 0;
@@ -325,7 +343,7 @@
 
                 const now = new Date();
                 const expireDate = new Date();
-                expireDate.setDate(now.getDate() + 60);
+                expireDate.setDate(now.getDate() + targetValidDays); // 👈 動態引入上架設定的天數
 
                 let newPoints = currentPoints - cost;
                 await updateDoc(userDocRef, { totalPoints: newPoints });
@@ -352,7 +370,7 @@
                     detail: `花費 ${cost} 點兌換成功`
                 });
 
-                showCustomAlert(`🎉 成功兌換【${cName}】！\n已自餘額扣除 ${cost} 點，請於 60 天內使用完畢。`);
+                showCustomAlert(`🎉 成功兌換【${cName}】！\n已自餘額扣除 ${cost} 點，請於 ${targetValidDays} 天內使用完畢。`);
                 document.getElementById('points-display').innerText = newPoints; 
                 
                 loadPointHistory(currentLiffUserId);
@@ -456,11 +474,13 @@
                 qSnapshot.forEach(docSnap => {
                     const cData = docSnap.data();
                     const cid = docSnap.id;
+                    // 對齊顯示自訂效期天數文字
+                    let daysLimit = cData.validDays !== undefined ? cData.validDays : 60;
                     html += `
                         <div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid #fff0f2; background:white; margin-bottom:5px; border-radius:6px; border:1px solid #fcdce2;">
                             <div style="text-align:left; font-size:13px; max-width:70%;">
                                 <strong style="color:#6e5b5e;">🎀 ${cData.name}</strong><br>
-                                <small style="color:#c97288;">兌換代價: ${cData.cost !== undefined ? cData.cost : 0} 點</small>
+                                <small style="color:#c97288;">兌換代價: ${cData.cost !== undefined ? cData.cost : 0} 點 | 效期: ${daysLimit} 天</small>
                             </div>
                             <button class="cancel-point-btn" onclick="showUnpublishCouponModal('${cid}', '${dataNameSafe(cData.name)}')">🎀 下架</button>
                         </div>`;
@@ -469,9 +489,12 @@
             } catch(e) { box.innerHTML = "<p>總名冊盤點失敗</p>"; }
         }
 
+        // 【本次微調擴充點 3】：修改一鍵上架函數，將選擇的有效天數 (validDays) 同步傳入 Firestore 商品檔案內
         window.executeAddNewCoupon = async function() {
             const name = document.getElementById('coupon-name-input').value.trim();
             const cost = parseInt(document.getElementById('coupon-cost-input').value);
+            const validDays = parseInt(document.getElementById('custom-coupon-days-input').value) || 60; // 讀取自訂天數輸入框
+            
             if (!name) { showCustomAlert("請輸入優惠券名稱！"); return; }
             if (isNaN(cost) || cost <= 0) { showCustomAlert("所需點數必須大於 0 的數字！"); return; }
 
@@ -479,10 +502,14 @@
                 await addDoc(collection(db, "coupons"), {
                     name: name,
                     cost: cost,
+                    validDays: validDays, // 👈 將自訂有效期限一併封裝寫入雲端商品中
                     createdAt: new Date().toISOString()
                 });
                 showCustomAlert(`✨ 成功上架【${name}】！`);
                 document.getElementById('coupon-name-input').value = "";
+                // 恢復原廠設定值
+                document.getElementById('rb-coupon-60days').checked = true;
+                window.setCouponExpireDays(60);
                 loadBossCouponsMaster();
             } catch(e) { showCustomAlert("上架失敗"); }
         };
@@ -717,7 +744,6 @@
         .cancel-point-btn { background: #fff0f2; color: #d9534f; border: 1px solid #fcdce2; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; border: none; font-weight: bold; }
         .delete-user-master-btn { width: 100%; margin-top: 10px; padding: 8px; background-color: #fff0f1; color: #d9534f; border: 1px dashed #fcdce2; border-radius: 6px; font-size: 11px; cursor: pointer; font-weight: bold; }
         
-        /* 🔒 【終極修正核心】：補上最關鍵的獨立遮罩與彈窗樣式大括號，杜絕排版交叉感染 */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.55); z-index: 99999; justify-content: center; align-items: center; padding: 15px; box-sizing: border-box; backdrop-filter: blur(1px); -webkit-backdrop-filter: blur(1px); }
         .modal-box { background: white; padding: 22px 18px; border-radius: 16px; max-width: 330px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.25); text-align: center; box-sizing: border-box; max-height: 85vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
         
@@ -843,6 +869,16 @@
                     <label style="font-size:12px; font-weight:bold; color:#6e5b5e;">2. 設定所需兌換點數：</label>
                     <input type="number" id="coupon-cost-input" value="10">
                 </div>
+
+                <div id="coupon-expiry-group" style="margin: 15px 0;">
+                    <label style="font-size:12px; font-weight:bold; color:#6e5b5e;">3. 設定優惠券有效期限：</label>
+                    <div class="radio-group">
+                        <label class="radio-btn"><input type="radio" id="rb-coupon-60days" name="coupon_expiry" onclick="setCouponExpireDays(60)" checked>2 個月</label>
+                        <label class="radio-btn"><input type="radio" name="coupon_expiry" onclick="setCouponExpireDays('custom')">自訂天數</label>
+                    </div>
+                    <input type="number" id="custom-coupon-days-input" value="60" style="display:none; margin-top:8px;">
+                </div>
+
                 <button class="submit-btn" style="margin:0; padding:10px;" onclick="executeAddNewCoupon()">✨ 立即一鍵上架（全台同步）</button>
                 
                 <h4 style="font-size:13px; color:#8a7377; margin:18px 0 8px 0;">📋 目前專區架上總冊：</h4>
