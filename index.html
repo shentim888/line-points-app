@@ -33,6 +33,9 @@
         let pendingCouponId = ""; 
         let pendingUseWalletId = "";
         let pendingUseCouponName = "";
+        
+        // 暫存即將兌換的商品資訊（防呆用）
+        let pendingExchangeData = {};
 
         window.onload = function() {
             liff.init({ liffId: myLiffId, withLoginOnExternalBrowser: true })
@@ -302,7 +305,7 @@
                         <div class="shop-item">
                             <div class="shop-item-title">🎀 ${cData.name}</div>
                             <div class="shop-item-cost">所需點數：<strong>${displayCost}</strong> 點</div>
-                            <button class="shop-exchange-btn" onclick="executeExchangeCoupon('${cid}', '${dataNameSafe(cData.name)}', ${displayCost})">💖 兌換</button>
+                            <button class="shop-exchange-btn" onclick="askExchangeConfirm('${cid}', '${dataNameSafe(cData.name)}', ${displayCost})">💖 兌換</button>
                         </div>`;
                 });
                 grid.innerHTML = html;
@@ -310,12 +313,23 @@
         };
         window.closeShopModal = function() { document.getElementById('shop-overlay').style.display = "none"; };
 
-        function dataNameSafe(str) {
-            return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-        }
+        // 【優化項目 2】：新增防誤觸之「確認兌換引導彈窗」機制
+        window.askExchangeConfirm = function(cid, cName, cost) {
+            pendingExchangeData = { cid, cName, cost };
+            document.getElementById('exchange-confirm-msg').innerText = `確定要扣除 ${cost} 點，\n兌換【${cName}】嗎？`;
+            document.getElementById('exchange-confirm-overlay').style.display = "flex";
+        };
+        window.closeExchangeConfirmModal = function() {
+            document.getElementById('exchange-confirm-overlay').style.display = "none";
+            pendingExchangeData = {};
+        };
 
-        window.executeExchangeCoupon = async function(cid, cName, cost) {
-            if (!currentLiffUserId) return;
+        // 點擊確認彈窗內的「確定」後，才真正發動雲端交易
+        window.executeExchangeCoupon = async function() {
+            if (!currentLiffUserId || !pendingExchangeData.cid) return;
+            const { cid, cName, cost } = pendingExchangeData;
+            closeExchangeConfirmModal();
+            
             const shopGrid = document.getElementById('shop-grid');
             shopGrid.style.pointerEvents = "none"; 
 
@@ -378,7 +392,7 @@
 
         window.openBagModal = async function() {
             const container = document.getElementById('bag-container');
-            container.innerHTML = "<div style='color:#a18b8f;'>🌸 正在翻開您的現有優惠券口袋...</div>";
+            container.innerHTML = "<div style='color:#a18b8f;'>🌸 正在翻開您的優惠券口袋...</div>";
             document.getElementById('bag-overlay').style.display = "flex";
             if (!currentLiffUserId) return;
 
@@ -406,10 +420,11 @@
         };
         window.closeBagModal = function() { document.getElementById('bag-overlay').style.display = "none"; };
 
+        // 【優化項目 3】：修改核銷確認視窗的文字口吻為親切、核對版本
         window.showUseCouponConfirmModal = function(wid, cName) {
             pendingUseWalletId = wid;
             pendingUseCouponName = cName;
-            document.getElementById('use-coupon-confirm-msg').innerText = `確定要立即現場核銷【${cName}】嗎？\n請確認您目前正於店員面前，核銷後此券將永久消失！`;
+            document.getElementById('use-coupon-confirm-msg').innerText = `立即使用【${cName}】嗎？\n請與店家核對，使用後此券將永久消失！`;
             document.getElementById('use-coupon-confirm-overlay').style.display = "flex";
         };
         window.closeUseCouponConfirmModal = function() {
@@ -432,13 +447,13 @@
                     name: targetName,
                     actionAt: new Date().toISOString(),
                     type: "use",
-                    detail: "於店面現場成功核銷使用"
+                    detail: "成功使用優惠券"
                 });
 
-                showCustomAlert(`✅【${targetName}】核銷成功！\n歡迎再度光臨！`);
+                showCustomAlert(`✅【${targetName}】已成功使用！\n歡迎再度光臨！`);
                 loadCustomerCouponHistory(currentLiffUserId);
                 closeBagModal();
-            } catch(e) { showCustomAlert("核銷失敗，請重試"); }
+            } catch(e) { showCustomAlert("操作失敗，請重試"); }
         };
 
         async function loadCustomerCouponHistory(userId) {
@@ -487,32 +502,24 @@
             } catch (e) { listEl.innerHTML = "<p>載入失敗</p>"; }
         }
 
-        // 【全新改版核心】：21天內「逐筆拆解明細」智慧清單排版
         async function loadExpiryRemindersList() {
             const box = document.getElementById('boss-reminder-list');
             box.innerHTML = "<div style='text-align:center; padding:15px; color:#a18b8f;'>🌸 正在深度掃描未來 21 天內即將過期的所有明細...</div>";
             
             try {
-                // 1. 設定時間區間範圍
                 const now = new Date();
-                
-                // 今天 00:00:00 作為起點
                 const startRange = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-                
-                // 21 天後的 23:59:59 作為終點
                 const endRange = new Date(startRange.getTime() + 21 * 24 * 60 * 60 * 1000 + 23 * 60 * 60 * 1000 + 59 * 60 * 1000 + 59 * 1000);
                 
                 const querySnapshot = await getDocs(collection(db, "users"));
                 let html = "";
                 let itemTotalCount = 0;
 
-                // 2. 遍歷全體會員
                 for (const userDoc of querySnapshot.docs) {
                     const uData = userDoc.data();
                     const uid = userDoc.id;
                     const userName = uData.lineName || '貴賓';
 
-                    // A. 清查點數日誌（逐筆拆解）
                     const pSnapshot = await getDocs(collection(db, "users", uid, "point_log"));
                     pSnapshot.forEach(pDoc => {
                         const p = pDoc.data();
@@ -540,7 +547,6 @@
                         }
                     });
 
-                    // B. 清查兌換券錢包（逐筆拆解）
                     const cSnapshot = await getDocs(collection(db, "users", uid, "coupon_wallet"));
                     cSnapshot.forEach(cDoc => {
                         const c = cDoc.data();
@@ -576,6 +582,7 @@
             }
         }
 
+        // 載入上架商品總冊
         async function loadBossCouponsMaster() {
             const box = document.getElementById('boss-coupons-master-list');
             box.innerHTML = "<div style='color:#a18b8f; font-size:12px;'>商品架盤點中...</div>";
@@ -587,13 +594,15 @@
                     const cData = docSnap.data();
                     const cid = docSnap.id;
                     let daysLimit = cData.validDays !== undefined ? cData.validDays : 60;
+                    
+                    // 【優化項目 1】：將下架按鈕前面的 “🎀” 圖示更換為更具刪除意味的 “❌” 圖示，並修正為“兌換點數”
                     html += `
                         <div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid #fff0f2; background:white; margin-bottom:5px; border-radius:6px; border:1px solid #fcdce2;">
                             <div style="text-align:left; font-size:13px; max-width:70%;">
                                 <strong style="color:#6e5b5e;">🎀 ${cData.name}</strong><br>
-                                <small style="color:#c97288;">兌換代價: ${cData.cost !== undefined ? cData.cost : 0} 點 | 效期: ${daysLimit} 天</small>
+                                <small style="color:#c97288;">兌換點數: ${cData.cost !== undefined ? cData.cost : 0} 點 | 效期: ${daysLimit} 天</small>
                             </div>
-                            <button class="cancel-point-btn" onclick="showUnpublishCouponModal('${cid}', '${dataNameSafe(cData.name)}')">🎀 下架</button>
+                            <button class="cancel-point-btn" onclick="showUnpublishCouponModal('${cid}', '${dataNameSafe(cData.name)}')">❌ 下架</button>
                         </div>`;
                 });
                 box.innerHTML = html;
@@ -618,6 +627,9 @@
                 showCustomAlert(`✨ 成功上架【${name}】！`);
                 document.getElementById('coupon-name-input').value = "";
                 document.getElementById('rb-coupon-60days').checked = true;
+                
+                // 【優化項目 1】：重置輸入框時，預設值帶回 3 點
+                document.getElementById('coupon-cost-input').value = 3; 
                 window.setCouponExpireDays(60);
                 loadBossCouponsMaster();
             } catch(e) { showCustomAlert("上架失敗"); }
@@ -658,7 +670,7 @@
                     html += `
                         <li style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; padding:4px 0; ${isCanceled ? 'text-decoration:line-through;color:#aaa;':''}">
                             <div><strong>${data.pointsObtained > 0 ? '+':''}${data.pointsObtained}點</strong> (${data.remark || '無'})</div>
-                            ${!isCanceled ? `<button class="cancel-point-btn" onclick="showCancelConfirmModal('${uid}', '${logId}', ${data.pointsObtained})">註銷</button>` : '<span>已註銷</span>'}
+                            ${!isCanceled ? `<button class="cancel-point-btn" onclick="showCancelConfirmModal('${uid}', '${logId}', ${data.pointsObtained})">❌ 註銷</button>` : '<span>已註銷</span>'}
                         </li>`;
                 });
                 logListEl.innerHTML = html || "<li>該用戶尚無紀錄</li>";
@@ -712,7 +724,7 @@
                 if (document.getElementById('rb-deduct-custom').checked) {
                     finalRemark = document.getElementById('custom-remark-deduct-box').value.trim();
                 } else if (document.getElementById('rb-deduct-1').checked) {
-                    finalRemark = "兌延券";
+                    finalRemark = "兌換券";
                 } else if (document.getElementById('rb-deduct-2').checked) {
                     finalRemark = "誤發扣除";
                 }
@@ -842,7 +854,7 @@
             
             <div class="shop-btn-row">
                 <button class="action-mall-btn btn-pink-shop" onclick="openShopModal()">🌸 點數兌換專區</button>
-                <button class="action-mall-btn btn-white-bag" onclick="openBagModal()">🎀 我的現有優惠券</button>
+                <button class="action-mall-btn btn-white-bag" onclick="openBagModal()">🎀 我的優惠券</button>
             </div>
             
             <p style="font-size:12px; color:#c97288; font-weight:bold; margin-top:5px;">請出示下方條碼給店家掃描</p>
@@ -920,7 +932,7 @@
         <div class="boss-nav-tabs">
             <button id="tab-btn-cust" class="boss-tab-btn tab-active" onclick="switchBossTab('customer-list-page')">❤️ 會員名冊</button>
             <button id="tab-btn-remind" class="boss-tab-btn" onclick="switchBossTab('reminder-list-page')">⏰ 提醒清單</button>
-            <button id="tab-btn-fac" class="boss-tab-btn" onclick="switchBossTab('coupon-factory-page')">🌸 兌換券上架</button>
+            <button id="tab-btn-fac" class="boss-tab-btn" onclick="switchBossTab('coupon-factory-page')">🌸 優惠券上架</button>
         </div>
 
         <div id="customer-list-page">
@@ -942,7 +954,7 @@
                 </div>
                 <div style="margin-bottom: 12px;">
                     <label style="font-size:12px; font-weight:bold; color:#6e5b5e;">2. 設定所需兌換點數：</label>
-                    <input type="number" id="coupon-cost-input" value="10">
+                    <input type="number" id="coupon-cost-input" value="3">
                 </div>
 
                 <div id="coupon-expiry-group" style="margin: 15px 0;">
@@ -962,14 +974,37 @@
         </div>
     </div>
 
+    <div id="exchange-confirm-overlay" class="modal-overlay">
+        <div class="modal-box" style="border: 2px solid #c97288;">
+            <div class="modal-title">💖 兌換商品確認</div>
+            <div id="exchange-confirm-msg" class="modal-text" style="font-size: 14px; padding: 5px 0; font-weight: bold; line-height: 1.5;">確認兌換訊息</div>
+            <div class="modal-btn-row">
+                <button class="modal-btn-cancel" onclick="closeExchangeConfirmModal()">取消</button>
+                <button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeExchangeCoupon()">確定</button>
+            </div>
+        </div>
+    </div>
+
     <div id="shop-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">🌸 點數兌換專區</div><div class="modal-text" style="font-size:12px; margin-bottom:12px; color:#8a7377;">點擊下方商品即可扣點兌換</div><div id="shop-grid" class="shop-grid"></div><button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeShopModal()">關閉專區</button></div></div>
-    <div id="bag-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">🎫 我的現有優惠券</div><div id="bag-container" class="bag-list"></div><button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeBagModal()">關閉口袋</button></div></div>
-    <div id="use-coupon-confirm-overlay" class="modal-overlay"><div class="modal-box" style="border: 2px solid #c97288;"><div class="modal-title" style="color: #c97288;">💖 優惠券現場核銷</div><div id="use-coupon-confirm-msg" class="modal-text" style="text-align: left; font-size: 14px; padding: 5px 0;">確認核銷訊息</div><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeUseCouponConfirmModal()">取消</button><button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeUseCustomerCoupon()">確定</button></div></div></div>
+    <div id="bag-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">🎫 我的優惠券</div><div id="bag-container" class="bag-list"></div><button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeBagModal()">關閉口袋</button></div></div>
+    
+    <div id="use-coupon-confirm-overlay" class="modal-overlay">
+        <div class="modal-box" style="border: 2px solid #c97288;">
+            <div class="modal-title" style="color: #c97288;">❤️ 優惠券確認使用</div>
+            <div id="use-coupon-confirm-msg" class="modal-text" style="text-align: left; font-size: 14px; padding: 5px 0; font-weight: bold; line-height: 1.5;"></div>
+            <div class="modal-btn-row">
+                <button class="modal-btn-cancel" onclick="closeUseCouponConfirmModal()">取消</button>
+                <button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeUseCustomerCoupon()">確定</button>
+            </div>
+        </div>
+    </div>
+
     <div id="custom-alert-overlay" class="custom-alert-overlay"><div class="custom-alert-box"><div id="alert-msg" class="custom-alert-text">提示訊息</div><button class="custom-alert-btn" onclick="closeCustomAlert()">確定</button></div></div>
     <div id="boss-login-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">輸入密碼</div><div class="modal-text">請輸入最高階管理密碼</div><input type="password" id="boss-pass-input" placeholder="請輸入最高驗證碼"><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeBossLoginModal()">取消</button><button class="modal-btn-confirm" onclick="confirmBossLogin()">解鎖系統</button></div></div></div>
     <div id="cancel-confirm-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">最高權限操作</div><div id="cancel-confirm-msg" class="modal-text">確定要註銷這筆紀錄嗎？</div><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeCancelConfirmModal()">拒絕</button><button class="modal-btn-confirm" onclick="executeCancelPoint()">確定註銷</button></div></div></div>
     <div id="delete-member-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title" style="color: #d9534f;">🚨 永久刪除會員</div><div id="delete-member-msg" class="modal-text">確認刪除訊息</div><input type="text" id="delete-confirm-input" placeholder="請精準輸入 del" style="margin-top:8px; margin-bottom:5px;"><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeDeleteMemberModal()">取消</button><button class="modal-btn-danger-confirm" onclick="executeDeleteMember()">強行永久刪除</button></div></div></div>
-    <div id="unpublish-coupon-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">🎀 下架商品確認</div><div id="unpublish-coupon-msg" class="modal-text"></div><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeUnpublishCouponModal()">取消</button><button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeUnpublishCoupon()">確定移除下架</button></div></div></div>
+    
+    <div id="unpublish-coupon-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">❌ 下架商品確認</div><div id="unpublish-coupon-msg" class="modal-text"></div><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeUnpublishCouponModal()">取消</button><button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeUnpublishCoupon()">確定移除下架</button></div></div></div>
 
 </body>
 </html>
