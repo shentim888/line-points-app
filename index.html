@@ -34,7 +34,6 @@
         let pendingUseWalletId = "";
         let pendingUseCouponName = "";
         
-        // 暫存即將兌換的商品資訊（防呆用）
         let pendingExchangeData = {};
 
         window.onload = function() {
@@ -313,7 +312,6 @@
         };
         window.closeShopModal = function() { document.getElementById('shop-overlay').style.display = "none"; };
 
-        // 【優化項目 2】：新增防誤觸之「確認兌換引導彈窗」機制
         window.askExchangeConfirm = function(cid, cName, cost) {
             pendingExchangeData = { cid, cName, cost };
             document.getElementById('exchange-confirm-msg').innerText = `確定要扣除 ${cost} 點，\n兌換【${cName}】嗎？`;
@@ -324,7 +322,6 @@
             pendingExchangeData = {};
         };
 
-        // 點擊確認彈窗內的「確定」後，才真正發動雲端交易
         window.executeExchangeCoupon = async function() {
             if (!currentLiffUserId || !pendingExchangeData.cid) return;
             const { cid, cName, cost } = pendingExchangeData;
@@ -420,7 +417,6 @@
         };
         window.closeBagModal = function() { document.getElementById('bag-overlay').style.display = "none"; };
 
-        // 【優化項目 3】：修改核銷確認視窗的文字口吻為親切、核對版本
         window.showUseCouponConfirmModal = function(wid, cName) {
             pendingUseWalletId = wid;
             pendingUseCouponName = cName;
@@ -582,7 +578,6 @@
             }
         }
 
-        // 載入上架商品總冊
         async function loadBossCouponsMaster() {
             const box = document.getElementById('boss-coupons-master-list');
             box.innerHTML = "<div style='color:#a18b8f; font-size:12px;'>商品架盤點中...</div>";
@@ -595,7 +590,6 @@
                     const cid = docSnap.id;
                     let daysLimit = cData.validDays !== undefined ? cData.validDays : 60;
                     
-                    // 【優化項目 1】：將下架按鈕前面的 “🎀” 圖示更換為更具刪除意味的 “❌” 圖示，並修正為“兌換點數”
                     html += `
                         <div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid #fff0f2; background:white; margin-bottom:5px; border-radius:6px; border:1px solid #fcdce2;">
                             <div style="text-align:left; font-size:13px; max-width:70%;">
@@ -627,8 +621,6 @@
                 showCustomAlert(`✨ 成功上架【${name}】！`);
                 document.getElementById('coupon-name-input').value = "";
                 document.getElementById('rb-coupon-60days').checked = true;
-                
-                // 【優化項目 1】：重置輸入框時，預設值帶回 3 點
                 document.getElementById('coupon-cost-input').value = 3; 
                 window.setCouponExpireDays(60);
                 loadBossCouponsMaster();
@@ -974,6 +966,23 @@
         </div>
     </div>
 
+    <div id="shop-overlay" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-title">🌸 點數兌換專區</div>
+            <div class="modal-text" style="font-size:12px; margin-bottom:12px; color:#8a7377;">點擊下方商品即可扣點兌換</div>
+            <div id="shop-grid" class="shop-grid"></div>
+            <button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeShopModal()">關閉專區</button>
+        </div>
+    </div>
+
+    <div id="bag-overlay" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-title">🎫 我的優惠券</div>
+            <div id="bag-container" class="bag-list"></div>
+            <button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeBagModal()">關閉口袋</button>
+        </div>
+    </div>
+
     <div id="exchange-confirm-overlay" class="modal-overlay">
         <div class="modal-box" style="border: 2px solid #c97288;">
             <div class="modal-title">💖 兌換商品確認</div>
@@ -985,9 +994,6 @@
         </div>
     </div>
 
-    <div id="shop-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">🌸 點數兌換專區</div><div class="modal-text" style="font-size:12px; margin-bottom:12px; color:#8a7377;">點擊下方商品即可扣點兌換</div><div id="shop-grid" class="shop-grid"></div><button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeShopModal()">關閉專區</button></div></div>
-    <div id="bag-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">🎫 我的優惠券</div><div id="bag-container" class="bag-list"></div><button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeBagModal()">關閉口袋</button></div></div>
-    
     <div id="use-coupon-confirm-overlay" class="modal-overlay">
         <div class="modal-box" style="border: 2px solid #c97288;">
             <div class="modal-title" style="color: #c97288;">❤️ 優惠券確認使用</div>
@@ -999,12 +1005,58 @@
         </div>
     </div>
 
-    <div id="custom-alert-overlay" class="custom-alert-overlay"><div class="custom-alert-box"><div id="alert-msg" class="custom-alert-text">提示訊息</div><button class="custom-alert-btn" onclick="closeCustomAlert()">確定</button></div></div>
-    <div id="boss-login-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">輸入密碼</div><div class="modal-text">請輸入最高階管理密碼</div><input type="password" id="boss-pass-input" placeholder="請輸入最高驗證碼"><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeBossLoginModal()">取消</button><button class="modal-btn-confirm" onclick="confirmBossLogin()">解鎖系統</button></div></div></div>
-    <div id="cancel-confirm-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">最高權限操作</div><div id="cancel-confirm-msg" class="modal-text">確定要註銷這筆紀錄嗎？</div><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeCancelConfirmModal()">拒絕</button><button class="modal-btn-confirm" onclick="executeCancelPoint()">確定註銷</button></div></div></div>
-    <div id="delete-member-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title" style="color: #d9534f;">🚨 永久刪除會員</div><div id="delete-member-msg" class="modal-text">確認刪除訊息</div><input type="text" id="delete-confirm-input" placeholder="請精準輸入 del" style="margin-top:8px; margin-bottom:5px;"><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeDeleteMemberModal()">取消</button><button class="modal-btn-danger-confirm" onclick="executeDeleteMember()">強行永久刪除</button></div></div></div>
+    <div id="custom-alert-overlay" class="custom-alert-overlay">
+        <div class="custom-alert-box">
+            <div id="alert-msg" class="custom-alert-text">提示訊息</div>
+            <button class="custom-alert-btn" onclick="closeCustomAlert()">確定</button>
+        </div>
+    </div>
+
+    <div id="boss-login-overlay" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-title">輸入密碼</div>
+            <div class="modal-text">請輸入最高階管理密碼</div>
+            <input type="password" id="boss-pass-input" placeholder="請輸入最高驗證碼">
+            <div class="modal-btn-row">
+                <button class="modal-btn-cancel" onclick="closeBossLoginModal()">取消</button>
+                <button class="modal-btn-confirm" onclick="confirmBossLogin()">解鎖系統</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="cancel-confirm-overlay" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-title">最高權限操作</div>
+            <div id="cancel-confirm-msg" class="modal-text">確定要註銷這筆紀錄嗎？</div>
+            <div class="modal-btn-row">
+                <button class="modal-btn-cancel" onclick="closeCancelConfirmModal()">拒絕</button>
+                <button class="modal-btn-confirm" onclick="executeCancelPoint()">確定註銷</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="delete-member-overlay" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-title" style="color: #d9534f;">🚨 永久刪除會員</div>
+            <div id="delete-member-msg" class="modal-text">確認刪除訊息</div>
+            <input type="text" id="delete-confirm-input" placeholder="請精準輸入 del" style="margin-top:8px; margin-bottom:5px;">
+            <div class="modal-btn-row">
+                <button class="modal-btn-cancel" onclick="closeDeleteMemberModal()">取消</button>
+                <button class="modal-btn-danger-confirm" onclick="executeDeleteMember()">強行永久刪除</button>
+            </div>
+        </div>
+    </div>
     
-    <div id="unpublish-coupon-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">❌ 下架商品確認</div><div id="unpublish-coupon-msg" class="modal-text"></div><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeUnpublishCouponModal()">取消</button><button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeUnpublishCoupon()">確定移除下架</button></div></div></div>
+    <div id="unpublish-coupon-overlay" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-title">❌ 下架商品確認</div>
+            <div id="unpublish-coupon-msg" class="modal-text"></div>
+            <div class="modal-btn-row">
+                <button class="modal-btn-cancel" onclick="closeUnpublishCouponModal()">取消</button>
+                <button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeUnpublishCoupon()">確定移除下架</button>
+            </div>
+        </div>
+    </div>
 
 </body>
 </html>
