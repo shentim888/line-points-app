@@ -57,7 +57,6 @@
                 .catch(err => showCustomAlert("系統連線失敗，請重開 LINE 再試。"));
         };
 
-        // 自動檢查並建立會員錢包
         async function checkAndCreateUserWallet(userId, displayName) {
             try {
                 const userDocRef = doc(db, "users", userId);
@@ -77,7 +76,6 @@
             }
         }
 
-        // 產生 QR Code
         function generateMemberQRCode(userId) {
             document.getElementById("qrcode").innerHTML = "";
             new QRCode(document.getElementById("qrcode"), {
@@ -90,7 +88,6 @@
             });
         }
 
-        // 載入客人的點數歷史紀錄
         async function loadPointHistory(userId) {
             const listEl = document.getElementById('history-list');
             try {
@@ -115,7 +112,6 @@
             } catch(e) { listEl.innerHTML = "<li>點數明細載入失敗</li>"; }
         }
 
-        // 階梯分流第一層（顧客端點5下切店家）
         window.handleCustomerTitleClick = function() {
             customerClickCount++;
             if (customerClickCount === 5) {
@@ -123,18 +119,15 @@
                 document.getElementById('customer-view').style.display = "none";
                 document.getElementById('boss-view').style.display = "none";
                 document.getElementById('staff-view').style.display = "block";
-                
                 targetUserId = ""; 
                 document.getElementById('customer-name-display').innerText = "🌸 請掃描客戶QR code 🌸";
                 document.getElementById('staff-status').innerText = "✨ 點擊下方按鈕開始掃描。";
                 toggleFormFields(1); 
-                
                 showCustomAlert("已成功切換至店家管理後台");
             }
             setTimeout(() => { customerClickCount = 0; }, 3000); 
         };
 
-        // 階梯分流第二層（店家點5下切老闆娘）
         window.handleStaffTitleClick = function() {
             staffClickCount++;
             if (staffClickCount === 5) {
@@ -175,7 +168,6 @@
             }
         };
 
-        // 三頁籤分流控制
         window.switchBossTab = function(pageId) {
             document.getElementById('customer-list-page').style.display = "none";
             document.getElementById('coupon-factory-page').style.display = "none";
@@ -187,7 +179,7 @@
             
             if (pageId === 'customer-list-page') {
                 document.getElementById('customer-list-page').style.display = "block";
-                document.getElementById('tab-btn-cust').add ? {} : document.getElementById('tab-btn-cust').classList.add('tab-active');
+                document.getElementById('tab-btn-cust').classList.add('tab-active');
                 loadAllCustomers(); 
             } else if (pageId === 'coupon-factory-page') {
                 document.getElementById('coupon-factory-page').style.display = "block";
@@ -200,7 +192,6 @@
             }
         };
 
-        // 店員發點與扣點控制
         window.changePoints = function(amount) {
             let input = document.getElementById('points-input');
             let current = parseInt(input.value) || 0;
@@ -467,10 +458,9 @@
         }
 
         // ==========================================
-        // 👑 老闆娘最高端管理介面 
+        // 👑 總端最高管理介面 
         // ==========================================
         
-        // 1. 載入全店總冊
         async function loadAllCustomers() {
             const listEl = document.getElementById('boss-customer-list');
             listEl.innerHTML = "<div style='text-align:center; padding:10px; color:#a18b8f;'>🌸 正在撈取會員總冊...</div>";
@@ -497,82 +487,95 @@
             } catch (e) { listEl.innerHTML = "<p>載入失敗</p>"; }
         }
 
-        // 【新功能核心】：21天到期提醒清單前台動態預算引擎
+        // 【全新改版核心】：21天內「逐筆拆解明細」智慧清單排版
         async function loadExpiryRemindersList() {
             const box = document.getElementById('boss-reminder-list');
-            box.innerHTML = "<div style='text-align:center; padding:15px; color:#a18b8f;'>🌸 正在清查 21 天後即將到期的客戶名冊...</div>";
+            box.innerHTML = "<div style='text-align:center; padding:15px; color:#a18b8f;'>🌸 正在深度掃描未來 21 天內即將過期的所有明細...</div>";
             
             try {
-                // 精準鎖定台灣時區 21 天後的當天 yyyy/MM/dd
-                const today = new Date();
-                const targetDate = new Date(today.getTime() + 21 * 24 * 60 * 60 * 1000);
-                const targetDateStr = targetDate.toLocaleDateString('zh-TW', {year:'numeric', month:'2-digit', day:'2-digit'}); // 格式化為對齊 yyyy/MM/dd
+                // 1. 設定時間區間範圍
+                const now = new Date();
+                
+                // 今天 00:00:00 作為起點
+                const startRange = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+                
+                // 21 天後的 23:59:59 作為終點
+                const endRange = new Date(startRange.getTime() + 21 * 24 * 60 * 60 * 1000 + 23 * 60 * 60 * 1000 + 59 * 60 * 1000 + 59 * 1000);
                 
                 const querySnapshot = await getDocs(collection(db, "users"));
                 let html = "";
-                let matchCount = 0;
+                let itemTotalCount = 0;
 
+                // 2. 遍歷全體會員
                 for (const userDoc of querySnapshot.docs) {
                     const uData = userDoc.data();
                     const uid = userDoc.id;
-                    
-                    let expPoints = 0;
-                    let expCoupons = 0;
+                    const userName = uData.lineName || '貴賓';
 
-                    // A. 遍歷點數日誌
+                    // A. 清查點數日誌（逐筆拆解）
                     const pSnapshot = await getDocs(collection(db, "users", uid, "point_log"));
                     pSnapshot.forEach(pDoc => {
                         const p = pDoc.data();
                         if (p.status === "valid" && p.pointsObtained > 0 && p.expiredAt) {
-                            const pExpStr = new Date(p.expiredAt).toLocaleDateString('zh-TW', {year:'numeric', month:'2-digit', day:'2-digit'});
-                            if (pExpStr === targetDateStr) {
-                                expPoints += parseInt(p.pointsObtained) || 0;
+                            const expTime = new Date(p.expiredAt).getTime();
+                            if (expTime >= startRange.getTime() && expTime <= endRange.getTime()) {
+                                itemTotalCount++;
+                                const dateStr = new Date(p.expiredAt).toLocaleDateString('zh-TW', {month:'2-digit', day:'2-digit'});
+                                const daysLeft = Math.ceil((expTime - now.getTime()) / (24 * 60 * 60 * 1000));
+                                
+                                html += `
+                                    <div class="customer-item" style="border-left: 4px solid #c97288; background:#fffdfd; margin-bottom:6px; padding:10px 12px;">
+                                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                                            <div>
+                                                <strong style="color:#5c4d50; font-size:14px;">🌸 ${userName}</strong>
+                                                <div style="font-size:11px; color:#a18b8f; margin-top:2px;">項目：點數過期通知</div>
+                                            </div>
+                                            <div style="text-align:right;">
+                                                <div style="color:#c97288; font-size:13px; font-weight:bold;">⚠️ 有【 ${p.pointsObtained} 點 】點數</div>
+                                                <div style="font-size:11px; color:#8a7377; margin-top:2px;">將於 ${dateStr} (${daysLeft}天後) 到期</div>
+                                            </div>
+                                        </div>
+                                    </div>`;
                             }
                         }
                     });
 
-                    // B. 遍歷兌換券錢包
+                    // B. 清查兌換券錢包（逐筆拆解）
                     const cSnapshot = await getDocs(collection(db, "users", uid, "coupon_wallet"));
                     cSnapshot.forEach(cDoc => {
                         const c = cDoc.data();
                         if (c.status === "unused" && c.expiredAt) {
-                            const cExpStr = new Date(c.expiredAt).toLocaleDateString('zh-TW', {year:'numeric', month:'2-digit', day:'2-digit'});
-                            if (cExpStr === targetDateStr) {
-                                expCoupons += 1;
+                            const expTime = new Date(c.expiredAt).getTime();
+                            if (expTime >= startRange.getTime() && expTime <= endRange.getTime()) {
+                                itemTotalCount++;
+                                const dateStr = new Date(c.expiredAt).toLocaleDateString('zh-TW', {month:'2-digit', day:'2-digit'});
+                                const daysLeft = Math.ceil((expTime - now.getTime()) / (24 * 60 * 60 * 1000));
+                                
+                                html += `
+                                    <div class="customer-item" style="border-left: 4px solid #8a7377; background:#fdfdfd; margin-bottom:6px; padding:10px 12px;">
+                                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                                            <div>
+                                                <strong style="color:#5c4d50; font-size:14px;">🌸 ${userName}</strong>
+                                                <div style="font-size:11px; color:#a18b8f; margin-top:2px;">項目：券夾過期通知</div>
+                                            </div>
+                                            <div style="text-align:right;">
+                                                <div style="color:#8a7377; font-size:13px; font-weight:bold;">🎀 【 ${c.name} 】1 張</div>
+                                                <div style="font-size:11px; color:#8a7377; margin-top:2px;">將於 ${dateStr} (${daysLeft}天後) 到期</div>
+                                            </div>
+                                        </div>
+                                    </div>`;
                             }
                         }
                     });
-
-                    // C. 滿足任一條件則渲染前端明細卡片
-                    if (expPoints > 0 || expCoupons > 0) {
-                        matchCount++;
-                        let subDetails = "";
-                        if (expPoints > 0) subDetails += `<div style="color:#c97288; font-size:12px;">⚠️ 即將失效點數: <strong>${expPoints} 點</strong></div>`;
-                        if (expCoupons > 0) subDetails += `<div style="color:#8a7377; font-size:12px;">⚠️ 即將過期兌換券: <strong>${expCoupons} 張</strong></div>`;
-                        
-                        html += `
-                            <div class="customer-item" style="border-left: 4px solid #c97288; background:#fffdfd;">
-                                <div style="display:flex; justify-content:space-between; align-items:center;">
-                                    <div>
-                                        <strong style="color:#5c4d50; font-size:15px;">🌸 ${uData.lineName || '貴賓'}</strong>
-                                        <div style="font-size:10px; color:#a18b8f; margin-top:2px;">到期日: ${targetDate.toLocaleDateString()} (21天後)</div>
-                                    </div>
-                                    <div style="text-align:right;">
-                                        ${subDetails}
-                                    </div>
-                                </div>
-                            </div>`;
-                    }
                 }
 
-                box.innerHTML = html || `<div style="text-align:center; padding:30px; color:#a18b8f; font-size:13px;">📅 盤點完畢！<br>21 天後當天（${targetDate.toLocaleDateString()}）暫無任何客戶資產到期。</div>`;
+                box.innerHTML = html || `<div style="text-align:center; padding:30px; color:#a18b8f; font-size:13px;">📅 盤點完畢！<br>未來 21 天之內，沒有任何客戶的點數或券到期。</div>`;
                 
             } catch (e) {
-                box.innerHTML = "<div style='color:red; text-align:center;'>提醒清單預算失敗，請重試。</div>";
+                box.innerHTML = "<div style='color:red; text-align:center;'>清單讀取失敗，請重試。</div>";
             }
         }
 
-        // 2. 載入上架總表
         async function loadBossCouponsMaster() {
             const box = document.getElementById('boss-coupons-master-list');
             box.innerHTML = "<div style='color:#a18b8f; font-size:12px;'>商品架盤點中...</div>";
@@ -698,7 +701,6 @@
             } catch (e) { showCustomAlert("刪除失敗"); }
         };
 
-        // 財務扣點等邏輯常規對齊
         window.confirmSubmit = async function() {
             if (!targetUserId) { showCustomAlert("操作失敗！請先點擊上方「📷 掃描會員」讀取客人的條碼。"); return; }
             const pointsChange = parseInt(document.getElementById('points-input').value);
@@ -710,7 +712,7 @@
                 if (document.getElementById('rb-deduct-custom').checked) {
                     finalRemark = document.getElementById('custom-remark-deduct-box').value.trim();
                 } else if (document.getElementById('rb-deduct-1').checked) {
-                    finalRemark = "兌換券";
+                    finalRemark = "兌延券";
                 } else if (document.getElementById('rb-deduct-2').checked) {
                     finalRemark = "誤發扣除";
                 }
@@ -783,7 +785,6 @@
         .bag-item-date { font-size: 10px; color: #a18b8f; margin-top: 2px; }
         .bag-use-btn { padding: 6px 12px; background: #c97288; color: white; border: none; border-radius: 6px; font-weight: bold; font-size: 11px; cursor: pointer; flex-shrink: 0; }
 
-        /* 老闆娘專屬橫向分流三籤選單排版 */
         .boss-nav-tabs { display: flex; gap: 6px; width: 98%; max-width: 370px; margin: 0 auto 15px auto; justify-content: space-between; }
         .boss-tab-btn { flex: 1; padding: 10px 4px; border-radius: 10px; border: 1px solid #fcdce2; background: white; color: #8a7377; font-weight: bold; font-size: 12px; cursor: pointer; white-space: nowrap; }
         .tab-active { background: #c97288 !important; color: white !important; border-color: #c97288 !important; }
@@ -928,7 +929,7 @@
         </div>
 
         <div id="reminder-list-page" style="display:none;">
-            <button class="scan-btn" style="margin: 5px 0 15px 0; padding:10px; font-size:14px; background-color:#fff0f2;" onclick="loadExpiryRemindersList()">🔍 立即重新盤點 21 天後到期名冊</button>
+            <button class="scan-btn" style="margin: 5px 0 15px 0; padding:10px; font-size:14px; background-color:#fff0f2;" onclick="loadExpiryRemindersList()">🔍 立即盤點未來 21 天內即將過期清單</button>
             <div id="boss-reminder-list" class="customer-list-container"></div>
         </div>
 
@@ -953,7 +954,7 @@
                     <input type="number" id="custom-coupon-days-input" value="60" style="display:none; margin-top:8px;">
                 </div>
 
-                <button class="submit-btn" style="margin:0; padding:10px;" onclick="executeAddNewCoupon()">✨ 立即一鍵上架（全台同步）</button>
+                <button class="submit-btn" style="margin:0; padding:10px;" onclick="executeAddNewCoupon()">✨ 立即上架</button>
                 
                 <h4 style="font-size:13px; color:#8a7377; margin:18px 0 8px 0;">📋 目前專區架上總冊：</h4>
                 <div id="boss-coupons-master-list"></div>
