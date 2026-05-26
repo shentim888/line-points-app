@@ -175,21 +175,21 @@
             document.getElementById('coupon-factory-page').style.display = "none";
             document.getElementById('reminder-list-page').style.display = "none";
             
-            document.getElementById('tab-btn-cust').classList.remove('tab-active');
-            document.getElementById('tab-btn-fac').classList.remove('tab-active');
-            document.getElementById('tab-btn-remind').classList.remove('tab-active');
+            document.getElementById('tab-btn-cust').className = 'boss-tab-btn';
+            document.getElementById('tab-btn-fac').className = 'boss-tab-btn';
+            document.getElementById('tab-btn-remind').className = 'boss-tab-btn';
             
             if (pageId === 'customer-list-page') {
                 document.getElementById('customer-list-page').style.display = "block";
-                document.getElementById('tab-btn-cust').classList.add('tab-active');
+                document.getElementById('tab-btn-cust').className = 'boss-tab-btn tab-active';
                 loadAllCustomers(); 
             } else if (pageId === 'coupon-factory-page') {
                 document.getElementById('coupon-factory-page').style.display = "block";
-                document.getElementById('tab-btn-fac').classList.add('tab-active');
+                document.getElementById('tab-btn-fac').className = 'boss-tab-btn tab-active';
                 loadBossCouponsMaster(); 
             } else if (pageId === 'reminder-list-page') {
                 document.getElementById('reminder-list-page').style.display = "block";
-                document.getElementById('tab-btn-remind').classList.add('tab-active');
+                document.getElementById('tab-btn-remind').className = 'boss-tab-btn tab-active';
                 loadExpiryRemindersList(); 
             }
         };
@@ -509,7 +509,6 @@
                 
                 const querySnapshot = await getDocs(collection(db, "users"));
                 let html = "";
-                let itemTotalCount = 0;
 
                 for (const userDoc of querySnapshot.docs) {
                     const uData = userDoc.data();
@@ -522,7 +521,6 @@
                         if (p.status === "valid" && p.pointsObtained > 0 && p.expiredAt) {
                             const expTime = new Date(p.expiredAt).getTime();
                             if (expTime >= startRange.getTime() && expTime <= endRange.getTime()) {
-                                itemTotalCount++;
                                 const dateStr = new Date(p.expiredAt).toLocaleDateString('zh-TW', {month:'2-digit', day:'2-digit'});
                                 const daysLeft = Math.ceil((expTime - now.getTime()) / (24 * 60 * 60 * 1000));
                                 
@@ -549,7 +547,6 @@
                         if (c.status === "unused" && c.expiredAt) {
                             const expTime = new Date(c.expiredAt).getTime();
                             if (expTime >= startRange.getTime() && expTime <= endRange.getTime()) {
-                                itemTotalCount++;
                                 const dateStr = new Date(c.expiredAt).toLocaleDateString('zh-TW', {month:'2-digit', day:'2-digit'});
                                 const daysLeft = Math.ceil((expTime - now.getTime()) / (24 * 60 * 60 * 1000));
                                 
@@ -754,6 +751,10 @@
             } catch (e) { showCustomAlert("雲端寫入失敗"); }
             finally { submitBtn.disabled = false; submitBtn.innerText = "確定"; }
         };
+
+        function dataNameSafe(str) {
+            return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        }
 
         window.loadAllCustomers = loadAllCustomers;
         window.loadBossCouponsMaster = loadBossCouponsMaster;
