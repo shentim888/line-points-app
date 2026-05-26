@@ -175,20 +175,28 @@
             }
         };
 
+        // 三頁籤分流控制
         window.switchBossTab = function(pageId) {
             document.getElementById('customer-list-page').style.display = "none";
             document.getElementById('coupon-factory-page').style.display = "none";
+            document.getElementById('reminder-list-page').style.display = "none";
+            
             document.getElementById('tab-btn-cust').classList.remove('tab-active');
             document.getElementById('tab-btn-fac').classList.remove('tab-active');
+            document.getElementById('tab-btn-remind').classList.remove('tab-active');
             
             if (pageId === 'customer-list-page') {
                 document.getElementById('customer-list-page').style.display = "block";
-                document.getElementById('tab-btn-cust').classList.add('tab-active');
+                document.getElementById('tab-btn-cust').add ? {} : document.getElementById('tab-btn-cust').classList.add('tab-active');
                 loadAllCustomers(); 
-            } else {
+            } else if (pageId === 'coupon-factory-page') {
                 document.getElementById('coupon-factory-page').style.display = "block";
                 document.getElementById('tab-btn-fac').classList.add('tab-active');
                 loadBossCouponsMaster(); 
+            } else if (pageId === 'reminder-list-page') {
+                document.getElementById('reminder-list-page').style.display = "block";
+                document.getElementById('tab-btn-remind').classList.add('tab-active');
+                loadExpiryRemindersList(); 
             }
         };
 
@@ -222,7 +230,6 @@
             }
         };
 
-        // 【本次微調擴充點 1】：新增老闆娘上架優惠券的有效期限按鈕點擊切換事件
         window.setCouponExpireDays = function(days) {
             if (days === 'custom') {
                 document.getElementById('custom-coupon-days-input').style.display = "block";
@@ -316,17 +323,15 @@
             return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
         }
 
-        // 【本次微調擴充點 2】：修改客戶兌換函數，自動去資料庫撈取 validDays 進行到期日計算，不寫死 60 天
         window.executeExchangeCoupon = async function(cid, cName, cost) {
             if (!currentLiffUserId) return;
             const shopGrid = document.getElementById('shop-grid');
             shopGrid.style.pointerEvents = "none"; 
 
             try {
-                // 先確認商品在資料庫設定的自訂有效天數
                 const couponDocRef = doc(db, "coupons", cid);
                 const couponDocSnap = await getDoc(couponDocRef);
-                let targetValidDays = 60; // 預設值 60 天做安全防呆
+                let targetValidDays = 60; 
                 if (couponDocSnap.exists() && couponDocSnap.data().validDays !== undefined) {
                     targetValidDays = parseInt(couponDocSnap.data().validDays) || 60;
                 }
@@ -343,7 +348,7 @@
 
                 const now = new Date();
                 const expireDate = new Date();
-                expireDate.setDate(now.getDate() + targetValidDays); // 👈 動態引入上架設定的天數
+                expireDate.setDate(now.getDate() + targetValidDays); 
 
                 let newPoints = currentPoints - cost;
                 await updateDoc(userDocRef, { totalPoints: newPoints });
@@ -462,136 +467,10 @@
         }
 
         // ==========================================
-        // 👑 優惠券工廠管理功能 (最高後台)
+        // 👑 老闆娘最高端管理介面 
         // ==========================================
-        async function loadBossCouponsMaster() {
-            const box = document.getElementById('boss-coupons-master-list');
-            box.innerHTML = "<div style='color:#a18b8f; font-size:12px;'>商品架盤點中...</div>";
-            try {
-                const qSnapshot = await getDocs(collection(db, "coupons"));
-                if (qSnapshot.empty) { box.innerHTML = "<p style='font-size:12px; color:#a18b8f;'>目前總專區架上沒有商品。</p>"; return; }
-                let html = "";
-                qSnapshot.forEach(docSnap => {
-                    const cData = docSnap.data();
-                    const cid = docSnap.id;
-                    // 對齊顯示自訂效期天數文字
-                    let daysLimit = cData.validDays !== undefined ? cData.validDays : 60;
-                    html += `
-                        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid #fff0f2; background:white; margin-bottom:5px; border-radius:6px; border:1px solid #fcdce2;">
-                            <div style="text-align:left; font-size:13px; max-width:70%;">
-                                <strong style="color:#6e5b5e;">🎀 ${cData.name}</strong><br>
-                                <small style="color:#c97288;">兌換代價: ${cData.cost !== undefined ? cData.cost : 0} 點 | 效期: ${daysLimit} 天</small>
-                            </div>
-                            <button class="cancel-point-btn" onclick="showUnpublishCouponModal('${cid}', '${dataNameSafe(cData.name)}')">🎀 下架</button>
-                        </div>`;
-                });
-                box.innerHTML = html;
-            } catch(e) { box.innerHTML = "<p>總名冊盤點失敗</p>"; }
-        }
-
-        // 【本次微調擴充點 3】：修改一鍵上架函數，將選擇的有效天數 (validDays) 同步傳入 Firestore 商品檔案內
-        window.executeAddNewCoupon = async function() {
-            const name = document.getElementById('coupon-name-input').value.trim();
-            const cost = parseInt(document.getElementById('coupon-cost-input').value);
-            const validDays = parseInt(document.getElementById('custom-coupon-days-input').value) || 60; // 讀取自訂天數輸入框
-            
-            if (!name) { showCustomAlert("請輸入優惠券名稱！"); return; }
-            if (isNaN(cost) || cost <= 0) { showCustomAlert("所需點數必須大於 0 的數字！"); return; }
-
-            try {
-                await addDoc(collection(db, "coupons"), {
-                    name: name,
-                    cost: cost,
-                    validDays: validDays, // 👈 將自訂有效期限一併封裝寫入雲端商品中
-                    createdAt: new Date().toISOString()
-                });
-                showCustomAlert(`✨ 成功上架【${name}】！`);
-                document.getElementById('coupon-name-input').value = "";
-                // 恢復原廠設定值
-                document.getElementById('rb-coupon-60days').checked = true;
-                window.setCouponExpireDays(60);
-                loadBossCouponsMaster();
-            } catch(e) { showCustomAlert("上架失敗"); }
-        };
-
-        window.showUnpublishCouponModal = function(cid, name) {
-            pendingCouponId = cid;
-            document.getElementById('unpublish-coupon-msg').innerText = `確定要下架【 ${name} 】嗎？`;
-            document.getElementById('unpublish-coupon-overlay').style.display = "flex";
-        };
-        window.closeUnpublishCouponModal = function() {
-            document.getElementById('unpublish-coupon-overlay').style.display = "none";
-        };
-        window.executeUnpublishCoupon = async function() {
-            if (!pendingCouponId) return;
-            closeUnpublishCouponModal();
-            try {
-                await deleteDoc(doc(db, "coupons", pendingCouponId));
-                showCustomAlert("該商品已順利下架！");
-                loadBossCouponsMaster();
-            } catch(e) { showCustomAlert("下架失敗"); }
-        };
-
-        // ==========================================
-        // 帳務核銷與管理員核心
-        // ==========================================
-        window.confirmSubmit = async function() {
-            if (!targetUserId) { showCustomAlert("操作失敗！請先點擊上方「📷 掃描會員」讀取客人的條碼。"); return; }
-            const pointsChange = parseInt(document.getElementById('points-input').value);
-            if (pointsChange === 0) { showCustomAlert("點數不能為 0"); return; }
-            if (document.getElementById('staff-pass').value !== "0412") { showCustomAlert("管理密碼錯誤！"); return; }
-
-            let finalRemark = "";
-            if (pointsChange < 0) {
-                if (document.getElementById('rb-deduct-custom').checked) {
-                    finalRemark = document.getElementById('custom-remark-deduct-box').value.trim();
-                } else if (document.getElementById('rb-deduct-1').checked) {
-                    finalRemark = "兌換券";
-                } else if (document.getElementById('rb-deduct-2').checked) {
-                    finalRemark = "誤發扣除";
-                }
-                if (!finalRemark) { showCustomAlert("扣點時必須填寫原因！"); return; }
-            } else {
-                finalRemark = document.getElementById('remark-input-add').value.trim() || "店家發放";
-            }
-
-            const submitBtn = document.getElementById('staff-submit-btn');
-            submitBtn.disabled = true;
-            submitBtn.innerText = "同步中...";
-            submitBtn.classList.add('btn-disabled');
-
-            try {
-                const userDocRef = doc(db, "users", targetUserId);
-                const userDocSnap = await getDoc(userDocRef);
-                let currentPoints = userDocSnap.exists() ? (userDocSnap.data().totalPoints || 0) : 0;
-                let newPoints = currentPoints + pointsChange;
-
-                const now = new Date();
-                const logRef = collection(db, "users", targetUserId, "point_log");
-
-                if (pointsChange > 0) {
-                    const days = parseInt(document.getElementById('custom-days-input').value) || 180;
-                    const expireDate = new Date(); expireDate.setDate(now.getDate() + days);
-                    await addDoc(logRef, { pointsObtained: pointsChange, obtainedAt: now.toISOString(), expiredAt: expireDate.toISOString(), status: "valid", remark: finalRemark });
-                } else {
-                    await addDoc(logRef, { pointsObtained: pointsChange, obtainedAt: now.toISOString(), expiredAt: now.toISOString(), status: "deducted", remark: finalRemark });
-                }
-
-                await setDoc(userDocRef, { totalPoints: newPoints }, { merge: true });
-                showCustomAlert("操作成功！最新餘額：" + newPoints);
-                
-                targetUserId = ""; 
-                document.getElementById('customer-name-display').innerText = "🌸 請掃描客戶QR code 🌸";
-                document.getElementById('points-input').value = "1";
-                toggleFormFields(1);
-            } catch (e) { showCustomAlert("雲端寫入失敗"); }
-            finally {
-                submitBtn.disabled = false;
-                submitBtn.innerText = "確定";
-                submitBtn.classList.remove('btn-disabled');
-            }
-        };
-
+        
+        // 1. 載入全店總冊
         async function loadAllCustomers() {
             const listEl = document.getElementById('boss-customer-list');
             listEl.innerHTML = "<div style='text-align:center; padding:10px; color:#a18b8f;'>🌸 正在撈取會員總冊...</div>";
@@ -617,6 +496,147 @@
                 listEl.innerHTML = html || "<p>尚無會員註冊</p>";
             } catch (e) { listEl.innerHTML = "<p>載入失敗</p>"; }
         }
+
+        // 【新功能核心】：21天到期提醒清單前台動態預算引擎
+        async function loadExpiryRemindersList() {
+            const box = document.getElementById('boss-reminder-list');
+            box.innerHTML = "<div style='text-align:center; padding:15px; color:#a18b8f;'>🌸 正在清查 21 天後即將到期的客戶名冊...</div>";
+            
+            try {
+                // 精準鎖定台灣時區 21 天後的當天 yyyy/MM/dd
+                const today = new Date();
+                const targetDate = new Date(today.getTime() + 21 * 24 * 60 * 60 * 1000);
+                const targetDateStr = targetDate.toLocaleDateString('zh-TW', {year:'numeric', month:'2-digit', day:'2-digit'}); // 格式化為對齊 yyyy/MM/dd
+                
+                const querySnapshot = await getDocs(collection(db, "users"));
+                let html = "";
+                let matchCount = 0;
+
+                for (const userDoc of querySnapshot.docs) {
+                    const uData = userDoc.data();
+                    const uid = userDoc.id;
+                    
+                    let expPoints = 0;
+                    let expCoupons = 0;
+
+                    // A. 遍歷點數日誌
+                    const pSnapshot = await getDocs(collection(db, "users", uid, "point_log"));
+                    pSnapshot.forEach(pDoc => {
+                        const p = pDoc.data();
+                        if (p.status === "valid" && p.pointsObtained > 0 && p.expiredAt) {
+                            const pExpStr = new Date(p.expiredAt).toLocaleDateString('zh-TW', {year:'numeric', month:'2-digit', day:'2-digit'});
+                            if (pExpStr === targetDateStr) {
+                                expPoints += parseInt(p.pointsObtained) || 0;
+                            }
+                        }
+                    });
+
+                    // B. 遍歷兌換券錢包
+                    const cSnapshot = await getDocs(collection(db, "users", uid, "coupon_wallet"));
+                    cSnapshot.forEach(cDoc => {
+                        const c = cDoc.data();
+                        if (c.status === "unused" && c.expiredAt) {
+                            const cExpStr = new Date(c.expiredAt).toLocaleDateString('zh-TW', {year:'numeric', month:'2-digit', day:'2-digit'});
+                            if (cExpStr === targetDateStr) {
+                                expCoupons += 1;
+                            }
+                        }
+                    });
+
+                    // C. 滿足任一條件則渲染前端明細卡片
+                    if (expPoints > 0 || expCoupons > 0) {
+                        matchCount++;
+                        let subDetails = "";
+                        if (expPoints > 0) subDetails += `<div style="color:#c97288; font-size:12px;">⚠️ 即將失效點數: <strong>${expPoints} 點</strong></div>`;
+                        if (expCoupons > 0) subDetails += `<div style="color:#8a7377; font-size:12px;">⚠️ 即將過期兌換券: <strong>${expCoupons} 張</strong></div>`;
+                        
+                        html += `
+                            <div class="customer-item" style="border-left: 4px solid #c97288; background:#fffdfd;">
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <div>
+                                        <strong style="color:#5c4d50; font-size:15px;">🌸 ${uData.lineName || '貴賓'}</strong>
+                                        <div style="font-size:10px; color:#a18b8f; margin-top:2px;">到期日: ${targetDate.toLocaleDateString()} (21天後)</div>
+                                    </div>
+                                    <div style="text-align:right;">
+                                        ${subDetails}
+                                    </div>
+                                </div>
+                            </div>`;
+                    }
+                }
+
+                box.innerHTML = html || `<div style="text-align:center; padding:30px; color:#a18b8f; font-size:13px;">📅 盤點完畢！<br>21 天後當天（${targetDate.toLocaleDateString()}）暫無任何客戶資產到期。</div>`;
+                
+            } catch (e) {
+                box.innerHTML = "<div style='color:red; text-align:center;'>提醒清單預算失敗，請重試。</div>";
+            }
+        }
+
+        // 2. 載入上架總表
+        async function loadBossCouponsMaster() {
+            const box = document.getElementById('boss-coupons-master-list');
+            box.innerHTML = "<div style='color:#a18b8f; font-size:12px;'>商品架盤點中...</div>";
+            try {
+                const qSnapshot = await getDocs(collection(db, "coupons"));
+                if (qSnapshot.empty) { box.innerHTML = "<p style='font-size:12px; color:#a18b8f;'>目前總專區架上沒有商品。</p>"; return; }
+                let html = "";
+                qSnapshot.forEach(docSnap => {
+                    const cData = docSnap.data();
+                    const cid = docSnap.id;
+                    let daysLimit = cData.validDays !== undefined ? cData.validDays : 60;
+                    html += `
+                        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid #fff0f2; background:white; margin-bottom:5px; border-radius:6px; border:1px solid #fcdce2;">
+                            <div style="text-align:left; font-size:13px; max-width:70%;">
+                                <strong style="color:#6e5b5e;">🎀 ${cData.name}</strong><br>
+                                <small style="color:#c97288;">兌換代價: ${cData.cost !== undefined ? cData.cost : 0} 點 | 效期: ${daysLimit} 天</small>
+                            </div>
+                            <button class="cancel-point-btn" onclick="showUnpublishCouponModal('${cid}', '${dataNameSafe(cData.name)}')">🎀 下架</button>
+                        </div>`;
+                });
+                box.innerHTML = html;
+            } catch(e) { box.innerHTML = "<p>總名冊盤點失敗</p>"; }
+        }
+
+        window.executeAddNewCoupon = async function() {
+            const name = document.getElementById('coupon-name-input').value.trim();
+            const cost = parseInt(document.getElementById('coupon-cost-input').value);
+            const validDays = parseInt(document.getElementById('custom-coupon-days-input').value) || 60; 
+            
+            if (!name) { showCustomAlert("請輸入優惠券名稱！"); return; }
+            if (isNaN(cost) || cost <= 0) { showCustomAlert("所需點數必須大於 0 的數字！"); return; }
+
+            try {
+                await addDoc(collection(db, "coupons"), {
+                    name: name,
+                    cost: cost,
+                    validDays: validDays, 
+                    createdAt: new Date().toISOString()
+                });
+                showCustomAlert(`✨ 成功上架【${name}】！`);
+                document.getElementById('coupon-name-input').value = "";
+                document.getElementById('rb-coupon-60days').checked = true;
+                window.setCouponExpireDays(60);
+                loadBossCouponsMaster();
+            } catch(e) { showCustomAlert("上架失敗"); }
+        };
+
+        window.showUnpublishCouponModal = function(cid, name) {
+            pendingCouponId = cid;
+            document.getElementById('unpublish-coupon-msg').innerText = `確定要下架【 ${name} 】嗎？`;
+            document.getElementById('unpublish-coupon-overlay').style.display = "flex";
+        };
+        window.closeUnpublishCouponModal = function() {
+            document.getElementById('unpublish-coupon-overlay').style.display = "none";
+        };
+        window.executeUnpublishCoupon = async function() {
+            if (!pendingCouponId) return;
+            closeUnpublishCouponModal();
+            try {
+                await deleteDoc(doc(db, "coupons", pendingCouponId));
+                showCustomAlert("該商品已順利下架！");
+                loadBossCouponsMaster();
+            } catch(e) { showCustomAlert("下架失敗"); }
+        };
 
         window.toggleCustomerDetails = async function(uid) {
             const box = document.getElementById(`details-${uid}`);
@@ -678,21 +698,71 @@
             } catch (e) { showCustomAlert("刪除失敗"); }
         };
 
+        // 財務扣點等邏輯常規對齊
+        window.confirmSubmit = async function() {
+            if (!targetUserId) { showCustomAlert("操作失敗！請先點擊上方「📷 掃描會員」讀取客人的條碼。"); return; }
+            const pointsChange = parseInt(document.getElementById('points-input').value);
+            if (pointsChange === 0) { showCustomAlert("點數不能為 0"); return; }
+            if (document.getElementById('staff-pass').value !== "0412") { showCustomAlert("管理密碼錯誤！"); return; }
+
+            let finalRemark = "";
+            if (pointsChange < 0) {
+                if (document.getElementById('rb-deduct-custom').checked) {
+                    finalRemark = document.getElementById('custom-remark-deduct-box').value.trim();
+                } else if (document.getElementById('rb-deduct-1').checked) {
+                    finalRemark = "兌換券";
+                } else if (document.getElementById('rb-deduct-2').checked) {
+                    finalRemark = "誤發扣除";
+                }
+                if (!finalRemark) { showCustomAlert("扣點時必須填寫原因！"); return; }
+            } else {
+                finalRemark = document.getElementById('remark-input-add').value.trim() || "店家發放";
+            }
+
+            const submitBtn = document.getElementById('staff-submit-btn');
+            submitBtn.disabled = true; submitBtn.innerText = "同步中...";
+
+            try {
+                const userDocRef = doc(db, "users", targetUserId);
+                const userDocSnap = await getDoc(userDocRef);
+                let currentPoints = userDocSnap.exists() ? (userDocSnap.data().totalPoints || 0) : 0;
+                let newPoints = currentPoints + pointsChange;
+
+                const now = new Date();
+                const logRef = collection(db, "users", targetUserId, "point_log");
+
+                if (pointsChange > 0) {
+                    const days = parseInt(document.getElementById('custom-days-input').value) || 180;
+                    const expireDate = new Date(); expireDate.setDate(now.getDate() + days);
+                    await addDoc(logRef, { pointsObtained: pointsChange, obtainedAt: now.toISOString(), expiredAt: expireDate.toISOString(), status: "valid", remark: finalRemark });
+                } else {
+                    await addDoc(logRef, { pointsObtained: pointsChange, obtainedAt: now.toISOString(), expiredAt: now.toISOString(), status: "deducted", remark: finalRemark });
+                }
+
+                await setDoc(userDocRef, { totalPoints: newPoints }, { merge: true });
+                showCustomAlert("操作成功！最新餘額：" + newPoints);
+                targetUserId = ""; 
+                document.getElementById('customer-name-display').innerText = "🌸 請掃描客戶QR code 🌸";
+                document.getElementById('points-input').value = "1";
+                toggleFormFields(1);
+            } catch (e) { showCustomAlert("雲端寫入失敗"); }
+            finally { submitBtn.disabled = false; submitBtn.innerText = "確定"; }
+        };
+
         window.loadAllCustomers = loadAllCustomers;
         window.loadBossCouponsMaster = loadBossCouponsMaster;
+        window.loadExpiryRemindersList = loadExpiryRemindersList;
     </script>
 
     <style>
-        /* 🌸 全局基礎美化 */
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center; background-color: #fffbfc; padding: 15px 10px; color: #5c4d50; touch-action: manipulation; }
         .card { background-color: #fff5f6; border-radius: 16px; padding: 24px; width: 95%; max-width: 360px; margin: 0 auto 20px auto; box-shadow: 0 4px 20px rgba(240, 210, 215, 0.25); box-sizing: border-box; }
-        h1, h2, h3 { color: #c97288; font-size: 24px; margin: 5px 0; font-weight: bold; user-select: none; -webkit-user-select: none; }
+        h1, h2, h3 { color: #c97288; font-size: 24px; margin: 5px 0; font-weight: bold; }
         .user-name { font-size: 18px; font-weight: bold; margin: 12px 0; color: #6e5b5e; }
         .points-section { background-color: white; border: 2px dashed #fcdce2; border-radius: 12px; padding: 12px; margin: 18px 0; }
         .points-num { font-size: 46px; font-weight: bold; color: #c97288; }
         .qrcode-section { margin: 20px auto; padding: 12px; background: #fff; width: 180px; height: 180px; box-shadow: 0 4px 12px rgba(240, 210, 215, 0.2); border-radius: 8px; display: flex; justify-content: center; align-items: center; box-sizing: border-box; }
         
-        /* 按鈕與列表 */
         .shop-btn-row { display: flex; gap: 10px; margin: 15px 0; justify-content: center; }
         .action-mall-btn { flex: 1; padding: 12px; border-radius: 10px; border: none; font-weight: bold; font-size: 13px; cursor: pointer; box-shadow: 0 3px 8px rgba(240,210,215,0.3); }
         .btn-pink-shop { background: #c97288; color: white; }
@@ -701,28 +771,26 @@
         .accordion-btn { width: 100%; max-width: 360px; margin: 0 auto 8px auto; padding: 12px 16px; background: white; border: 1px solid #fcdce2; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; font-weight: bold; color: #6e5b5e; cursor: pointer; box-sizing: border-box; }
         .accordion-content { display: none; background-color: #fff5f6; border-radius: 16px; padding: 18px; width: 95%; max-width: 360px; margin: 0 auto 15px auto; text-align: left; box-sizing: border-box; }
 
-        /* 專區商品架排版 */
         .shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 5px; max-height: 280px; overflow-y: auto; width: 100%; box-sizing: border-box; }
         .shop-item { background: #fffbfc; border: 1px solid #fcdce2; border-radius: 10px; padding: 10px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; box-sizing: border-box; }
         .shop-item-title { font-weight: bold; color: #5c4d50; font-size: 13px; margin-bottom: 5px; text-align: center; word-break: break-all; }
         .shop-item-cost { font-size: 11px; color: #8a7377; }
         .shop-exchange-btn { width: 100%; padding: 6px; background: #ffeef0; color: #c97288; border: none; border-radius: 6px; font-weight: bold; font-size: 11px; cursor: pointer; margin-top: 5px; }
 
-        /* 口袋背包排版 */
         .bag-list { max-height: 280px; overflow-y: auto; padding: 5px; width: 100%; box-sizing: border-box; }
         .bag-item { background: #fffbfc; border: 1px solid #fcdce2; border-radius: 10px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
         .bag-item-title { font-weight: bold; color: #5c4d50; font-size: 13px; word-break: break-all; text-align: left; }
         .bag-item-date { font-size: 10px; color: #a18b8f; margin-top: 2px; }
         .bag-use-btn { padding: 6px 12px; background: #c97288; color: white; border: none; border-radius: 6px; font-weight: bold; font-size: 11px; cursor: pointer; flex-shrink: 0; }
 
-        /* 後台管理切換標籤 */
-        .boss-nav-tabs { display: flex; gap: 8px; width: 95%; max-width: 360px; margin: 0 auto 15px auto; }
-        .boss-tab-btn { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #fcdce2; background: white; color: #8a7377; font-weight: bold; font-size: 14px; cursor: pointer; }
+        /* 老闆娘專屬橫向分流三籤選單排版 */
+        .boss-nav-tabs { display: flex; gap: 6px; width: 98%; max-width: 370px; margin: 0 auto 15px auto; justify-content: space-between; }
+        .boss-tab-btn { flex: 1; padding: 10px 4px; border-radius: 10px; border: 1px solid #fcdce2; background: white; color: #8a7377; font-weight: bold; font-size: 12px; cursor: pointer; white-space: nowrap; }
         .tab-active { background: #c97288 !important; color: white !important; border-color: #c97288 !important; }
 
         .factory-box { background: #fff5f6; padding: 15px; border-radius: 12px; border: 1px dashed #c97288; margin-top: 5px; text-align: left; }
         .history-list { list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto; font-size: 13px; }
-        .history-list li { padding: 8px 0; border-bottom: 1px solid #fff0f2; color: #6e5b5e; list-style-type: none; text-align: left; }
+        .history-list li { padding: 8px 0; border-bottom: 1px solid #fff0f2; color: #6e5b5e; text-align: left; }
         .scan-btn { width: 100%; padding: 15px; background-color: #ffeef0; color: #c97288; border: none; border-radius: 10px; font-size: 18px; cursor: pointer; font-weight: bold; margin: 15px 0; }
         .status-box { background: white; border-left: 4px solid #ffeef0; padding: 10px; font-size: 13px; text-align: left; color: #8a7377; }
         .panel { display: block; border-top: 1px dashed #fcdce2; padding-top: 15px; text-align: left; }
@@ -735,20 +803,20 @@
         .radio-btn:has(input:checked) { background: #ffeef0; color: #c97288; border-color: #fcdce2; font-weight: bold; }
         input[type="text"], input[type="password"], input[type="number"] { width: 100%; padding: 12px; border: 1px solid #fcdce2; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
         .submit-btn { width: 100%; padding: 14px; background-color: #ffeef0; color: #c97288; border: none; font-size: 16px; font-weight: bold; margin-top: 15px; border-radius: 10px; cursor: pointer; }
-        .customer-list-container { text-align: left; margin-top: 5px; max-height: 450px; overflow-y: auto; }
-        .customer-item { background: white; border: 1px solid #fcdce2; border-radius: 10px; margin-bottom: 8px; padding: 10px; }
+        .customer-list-container { text-align: left; margin-top: 5px; max-height: 430px; overflow-y: auto; }
+        .customer-item { background: white; border: 1px solid #fcdce2; border-radius: 10px; margin-bottom: 8px; padding: 12px; }
         .customer-info-row { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
         .badge-points { background: #ffeef0; color: #c97288; padding: 4px 10px; border-radius: 20px; font-weight: bold; font-size: 12px; }
         .customer-details-box { display: none; margin-top: 10px; padding-top: 8px; border-top: 1px dashed #fcdce2; }
         .boss-log-list { list-style: none; padding: 0; margin: 0; font-size: 12px; }
-        .cancel-point-btn { background: #fff0f2; color: #d9534f; border: 1px solid #fcdce2; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; border: none; font-weight: bold; }
+        .cancel-point-btn { background: #fff0f2; color: #d9534f; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; border: none; font-weight: bold; }
         .delete-user-master-btn { width: 100%; margin-top: 10px; padding: 8px; background-color: #fff0f1; color: #d9534f; border: 1px dashed #fcdce2; border-radius: 6px; font-size: 11px; cursor: pointer; font-weight: bold; }
         
-        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.55); z-index: 99999; justify-content: center; align-items: center; padding: 15px; box-sizing: border-box; backdrop-filter: blur(1px); -webkit-backdrop-filter: blur(1px); }
-        .modal-box { background: white; padding: 22px 18px; border-radius: 16px; max-width: 330px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.25); text-align: center; box-sizing: border-box; max-height: 85vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.55); z-index: 99999; justify-content: center; align-items: center; padding: 15px; box-sizing: border-box; backdrop-filter: blur(1px); }
+        .modal-box { background: white; padding: 22px 18px; border-radius: 16px; max-width: 330px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.25); text-align: center; box-sizing: border-box; max-height: 85vh; overflow-y: auto; }
         
         .custom-alert-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100000; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; }
-        .custom-alert-box { background: white; padding: 22px; border-radius: 16px; max-width: 290px; width: 100%; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2); box-sizing: border-box; }
+        .custom-alert-box { background: white; padding: 22px; border-radius: 16px; max-width: 290px; width: 100%; text-align: center; box-sizing: border-box; }
         .custom-alert-text { font-size: 15px; font-weight: bold; color: #5c4d50; margin-bottom: 18px; line-height: 1.4; word-break: break-all; }
         .custom-alert-btn { background: #ffeef0; color: #c97288; border: none; padding: 11px; font-size: 14px; font-weight: bold; border-radius: 8px; width: 100%; cursor: pointer; }
         
@@ -849,13 +917,19 @@
         <h2>美麗老闆娘後台系統</h2>
         
         <div class="boss-nav-tabs">
-            <button id="tab-btn-cust" class="boss-tab-btn tab-active" onclick="switchBossTab('customer-list-page')">💖 會員名冊總管</button>
-            <button id="tab-btn-fac" class="boss-tab-btn" onclick="switchBossTab('coupon-factory-page')">🌸 優惠券專區上架</button>
+            <button id="tab-btn-cust" class="boss-tab-btn tab-active" onclick="switchBossTab('customer-list-page')">❤️ 會員名冊</button>
+            <button id="tab-btn-remind" class="boss-tab-btn" onclick="switchBossTab('reminder-list-page')">⏰ 提醒清單</button>
+            <button id="tab-btn-fac" class="boss-tab-btn" onclick="switchBossTab('coupon-factory-page')">🌸 兌換券上架</button>
         </div>
 
         <div id="customer-list-page">
-            <button class="scan-btn" style="margin: 5px 0 15px 0; padding:10px;" onclick="loadAllCustomers()">✨ 重新整理全店總冊</button>
+            <button class="scan-btn" style="margin: 5px 0 15px 0; padding:10px; font-size:14px;" onclick="loadAllCustomers()">✨ 重新整理全店總冊</button>
             <div id="boss-customer-list" class="customer-list-container"></div>
+        </div>
+
+        <div id="reminder-list-page" style="display:none;">
+            <button class="scan-btn" style="margin: 5px 0 15px 0; padding:10px; font-size:14px; background-color:#fff0f2;" onclick="loadExpiryRemindersList()">🔍 立即重新盤點 21 天後到期名冊</button>
+            <div id="boss-reminder-list" class="customer-list-container"></div>
         </div>
 
         <div class="coupon-factory-page" id="coupon-factory-page" style="display:none;">
@@ -879,7 +953,7 @@
                     <input type="number" id="custom-coupon-days-input" value="60" style="display:none; margin-top:8px;">
                 </div>
 
-                <button class="submit-btn" style="margin:0; padding:10px;" onclick="executeAddNewCoupon()">✨ 立即一鍵上架</button>
+                <button class="submit-btn" style="margin:0; padding:10px;" onclick="executeAddNewCoupon()">✨ 立即一鍵上架（全台同步）</button>
                 
                 <h4 style="font-size:13px; color:#8a7377; margin:18px 0 8px 0;">📋 目前專區架上總冊：</h4>
                 <div id="boss-coupons-master-list"></div>
@@ -887,86 +961,14 @@
         </div>
     </div>
 
-    <div id="shop-overlay" class="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-title">🌸 點數兌換專區</div>
-            <div class="modal-text" style="font-size:12px; margin-bottom:12px; color:#8a7377;">點擊下方商品即可扣點兌換</div>
-            <div id="shop-grid" class="shop-grid"></div>
-            <button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeShopModal()">關閉專區</button>
-        </div>
-    </div>
-
-    <div id="bag-overlay" class="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-title">🎫 我的現有優惠券</div>
-            <div id="bag-container" class="bag-list"></div>
-            <button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeBagModal()">關閉口袋</button>
-        </div>
-    </div>
-
-    <div id="use-coupon-confirm-overlay" class="modal-overlay">
-        <div class="modal-box" style="border: 2px solid #c97288;">
-            <div class="modal-title" style="color: #c97288;">💖 優惠券現場核銷</div>
-            <div id="use-coupon-confirm-msg" class="modal-text" style="text-align: left; font-size: 14px; padding: 5px 0;">確認核銷訊息</div>
-            <div class="modal-btn-row">
-                <button class="modal-btn-cancel" onclick="closeUseCouponConfirmModal()">取消</button>
-                <button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeUseCustomerCoupon()">確定</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="custom-alert-overlay" class="custom-alert-overlay">
-        <div class="custom-alert-box">
-            <div id="alert-msg" class="custom-alert-text">提示訊息</div>
-            <button class="custom-alert-btn" onclick="closeCustomAlert()">確定</button>
-        </div>
-    </div>
-
-    <div id="boss-login-overlay" class="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-title">輸入密碼</div>
-            <div class="modal-text">請輸入最高階管理密碼</div>
-            <input type="password" id="boss-pass-input" placeholder="請輸入最高驗證碼">
-            <div class="modal-btn-row">
-                <button class="modal-btn-cancel" onclick="closeBossLoginModal()">取消</button>
-                <button class="modal-btn-confirm" onclick="confirmBossLogin()">解鎖系統</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="cancel-confirm-overlay" class="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-title">最高權限操作</div>
-            <div id="cancel-confirm-msg" class="modal-text">確定要註銷這筆紀錄嗎？</div>
-            <div class="modal-btn-row">
-                <button class="modal-btn-cancel" onclick="closeCancelConfirmModal()">拒絕</button>
-                <button class="modal-btn-confirm" onclick="executeCancelPoint()">確定註銷</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="delete-member-overlay" class="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-title" style="color: #d9534f;">🚨 永久刪除會員</div>
-            <div id="delete-member-msg" class="modal-text">確認刪除訊息</div>
-            <input type="text" id="delete-confirm-input" placeholder="請精準輸入 del" style="margin-top:8px; margin-bottom:5px;">
-            <div class="modal-btn-row">
-                <button class="modal-btn-cancel" onclick="closeDeleteMemberModal()">取消</button>
-                <button class="modal-btn-danger-confirm" onclick="executeDeleteMember()">強行永久刪除</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="unpublish-coupon-overlay" class="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-title">🎀 下架商品確認</div>
-            <div id="unpublish-coupon-msg" class="modal-text"></div>
-            <div class="modal-btn-row">
-                <button class="modal-btn-cancel" onclick="closeUnpublishCouponModal()">取消</button>
-                <button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeUnpublishCoupon()">確定移除下架</button>
-            </div>
-        </div>
-    </div>
+    <div id="shop-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">🌸 點數兌換專區</div><div class="modal-text" style="font-size:12px; margin-bottom:12px; color:#8a7377;">點擊下方商品即可扣點兌換</div><div id="shop-grid" class="shop-grid"></div><button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeShopModal()">關閉專區</button></div></div>
+    <div id="bag-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">🎫 我的現有優惠券</div><div id="bag-container" class="bag-list"></div><button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeBagModal()">關閉口袋</button></div></div>
+    <div id="use-coupon-confirm-overlay" class="modal-overlay"><div class="modal-box" style="border: 2px solid #c97288;"><div class="modal-title" style="color: #c97288;">💖 優惠券現場核銷</div><div id="use-coupon-confirm-msg" class="modal-text" style="text-align: left; font-size: 14px; padding: 5px 0;">確認核銷訊息</div><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeUseCouponConfirmModal()">取消</button><button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeUseCustomerCoupon()">確定</button></div></div></div>
+    <div id="custom-alert-overlay" class="custom-alert-overlay"><div class="custom-alert-box"><div id="alert-msg" class="custom-alert-text">提示訊息</div><button class="custom-alert-btn" onclick="closeCustomAlert()">確定</button></div></div>
+    <div id="boss-login-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">輸入密碼</div><div class="modal-text">請輸入最高階管理密碼</div><input type="password" id="boss-pass-input" placeholder="請輸入最高驗證碼"><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeBossLoginModal()">取消</button><button class="modal-btn-confirm" onclick="confirmBossLogin()">解鎖系統</button></div></div></div>
+    <div id="cancel-confirm-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">最高權限操作</div><div id="cancel-confirm-msg" class="modal-text">確定要註銷這筆紀錄嗎？</div><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeCancelConfirmModal()">拒絕</button><button class="modal-btn-confirm" onclick="executeCancelPoint()">確定註銷</button></div></div></div>
+    <div id="delete-member-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title" style="color: #d9534f;">🚨 永久刪除會員</div><div id="delete-member-msg" class="modal-text">確認刪除訊息</div><input type="text" id="delete-confirm-input" placeholder="請精準輸入 del" style="margin-top:8px; margin-bottom:5px;"><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeDeleteMemberModal()">取消</button><button class="modal-btn-danger-confirm" onclick="executeDeleteMember()">強行永久刪除</button></div></div></div>
+    <div id="unpublish-coupon-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">🎀 下架商品確認</div><div id="unpublish-coupon-msg" class="modal-text"></div><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeUnpublishCouponModal()">取消</button><button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeUnpublishCoupon()">確定移除下架</button></div></div></div>
 
 </body>
 </html>
