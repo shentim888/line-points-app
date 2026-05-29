@@ -35,8 +35,6 @@
         let pendingUseCouponName = "";
         
         let pendingExchangeData = {};
-        
-        // 用全局全權鎖定當前正在修改的唯一 UID 
         window.currentSelectedUserUidForRemark = "";
 
         window.onload = function() {
@@ -305,11 +303,13 @@
                     const cData = docSnap.data();
                     const cid = docSnap.id;
                     const displayCost = cData.cost !== undefined ? cData.cost : 0;
+                    // 連動升級：將資料庫存的選填備註須知安全過濾，一併傳給彈窗函數
+                    const cNote = cData.note || "";
                     html += `
                         <div class="shop-item">
                             <div class="shop-item-title">🎀 ${cData.name}</div>
                             <div class="shop-item-cost">所需點數：<strong>${displayCost}</strong> 點</div>
-                            <button class="shop-exchange-btn" onclick="askExchangeConfirm('${cid}', '${dataNameSafe(cData.name)}', ${displayCost})">💖 兌換</button>
+                            <button class="shop-exchange-btn" onclick="askExchangeConfirm('${cid}', '${dataNameSafe(cData.name)}', ${displayCost}, '${dataNameSafe(cNote)}')">💖 兌換</button>
                         </div>`;
                 });
                 grid.innerHTML = html;
@@ -317,9 +317,21 @@
         };
         window.closeShopModal = function() { document.getElementById('shop-overlay').style.display = "none"; };
 
-        window.askExchangeConfirm = function(cid, cName, cost) {
+        // 連動升級：問詢確認彈窗全面改寫，將備註須知動態渲染在中央
+        window.askExchangeConfirm = function(cid, cName, cost, note) {
             pendingExchangeData = { cid, cName, cost };
-            document.getElementById('exchange-confirm-msg').innerText = `確定要扣除 ${cost} 點，\n兌換【${cName}】嗎？`;
+            
+            let displayMsg = `確定要扣除 ${cost} 點，\n兌換【${cName}】嗎？`;
+            
+            // 如果店家上架時有寫備註須知，在此高亮注入彈窗
+            const noteContainer = document.getElementById('exchange-confirm-note-box');
+            if (note && note.trim() !== "") {
+                noteContainer.innerHTML = `<div style="margin-top:10px; padding:10px; background:#fff5f6; border:1px solid #fcdce2; border-radius:8px; text-align:left; font-size:12px; color:#c97288; max-height:120px; overflow-y:auto; font-weight:normal; white-space:pre-wrap;">⚠️ <strong>兌換須知與特別提醒：</strong>\n${note}</div><div style="font-size:11px; color:#8a7377; margin-top:6px; font-weight:normal;">💡 點擊「確定」即代表您認同以上條款。</div>`;
+            } else {
+                noteContainer.innerHTML = ""; 
+            }
+            
+            document.getElementById('exchange-confirm-msg').innerText = displayMsg;
             document.getElementById('exchange-confirm-overlay').style.display = "flex";
         };
         window.closeExchangeConfirmModal = function() {
@@ -388,7 +400,7 @@
                 loadPointHistory(currentLiffUserId);
                 loadCustomerCouponHistory(currentLiffUserId);
                 closeShopModal();
-            } catch(e) { showCustomAlert("專區交易失敗，請重試"); }
+            } catch(e) { showCustomAlert("專專交易失敗，請重試"); }
             finally { shopGrid.style.pointerEvents = "auto"; }
         };
 
@@ -481,14 +493,13 @@
                 let html = "";
                 querySnapshot.forEach((docSnap) => {
                     const data = docSnap.data();
-                    const uid = String(docSnap.id).trim(); // 強制去空白
+                    const uid = String(docSnap.id).trim(); 
                     
                     let displayName = data.lineName || '未命名';
                     if (data.remarkName) {
                         displayName += ` <span style='color:#c97288; font-size:12px; font-weight:bold;'>(${data.remarkName})</span>`;
                     }
 
-                    // 【終極修復點】：onclick 傳參直接改回簡單的純文字字串傳遞，並使用最嚴密的單引號包覆，絕對不走 DOM 屬性讀取以免被非同步洗掉！
                     html += `
                         <div class="customer-item">
                             <div class="customer-info-row" onclick="toggleCustomerDetails('${uid}')">
@@ -616,10 +627,13 @@
             } catch(e) { box.innerHTML = "<p>總名冊盤點失敗</p>"; }
         }
 
+        // 升級：新增商品時，將選填備註須知一併推入雲端資料庫
         window.executeAddNewCoupon = async function() {
             const name = document.getElementById('coupon-name-input').value.trim();
             const cost = parseInt(document.getElementById('coupon-cost-input').value);
             const validDays = parseInt(document.getElementById('custom-coupon-days-input').value) || 30; 
+            // 讀取全新備註框數值
+            const note = document.getElementById('coupon-note-input').value.trim();
             
             if (!name) { showCustomAlert("請輸入優惠券名稱！"); return; }
             if (isNaN(cost) || cost <= 0) { showCustomAlert("所需點數必須大於 0 的數字！"); return; }
@@ -629,10 +643,12 @@
                     name: name,
                     cost: cost,
                     validDays: validDays, 
+                    note: note, // 成功上雲
                     createdAt: new Date().toISOString()
                 });
                 showCustomAlert(`✨ 成功上架【${name}】！`);
                 document.getElementById('coupon-name-input').value = "";
+                document.getElementById('coupon-note-input').value = ""; // 清空
                 document.getElementById('rb-coupon-30days').checked = true;
                 document.getElementById('coupon-cost-input').value = 3; 
                 window.setCouponExpireDays(30);
@@ -718,10 +734,8 @@
             } catch (e) { showCustomAlert("刪除失敗"); }
         };
 
-        // 【重大升級】：完全捨棄易遺失的 Element 屬性讀取，改為點擊時將參數死死鎖定入 window 全局變數
         window.openRemarkModalDirect = function(uid, rawName, currentRemark) {
             window.currentSelectedUserUidForRemark = String(uid).trim(); 
-            
             document.getElementById('remark-user-title').innerText = `修改 ${rawName} 的店家備註`;
             document.getElementById('remark-name-input').value = currentRemark || "";
             document.getElementById('remark-name-overlay').style.display = "flex";
@@ -733,19 +747,15 @@
         };
         
         window.executeSaveRemark = async function() {
-            // 直接抓取全局死鎖的變數，拒絕任何空指針
             const targetUid = window.currentSelectedUserUidForRemark; 
             if (!targetUid || targetUid === "") { 
                 showCustomAlert("系統未選定目標會員，請重新點擊修改。"); 
                 return; 
             }
-            
             const newRemark = document.getElementById('remark-name-input').value.trim();
             closeRemarkModal();
-            
             try {
                 const userDocRef = doc(db, "users", targetUid);
-                // 執行百分之百雙向保險之寫入
                 await setDoc(userDocRef, { remarkName: newRemark }, { merge: true });
                 showCustomAlert("店家備註姓名已更新同步！");
                 loadAllCustomers();
@@ -926,7 +936,7 @@
     <div id="staff-view" style="display:none;" class="card">
         <h2 onclick="handleStaffTitleClick()" style="cursor: pointer;">店家管理後台</h2>
         <div id="staff-status" class="status-box">✨ 請點擊下方按鈕開始掃描。</div>
-        <button class="scan-btn" onclick="startScan()">📷 掃描會員</button>
+        <div class="scan-btn" onclick="startScan()">📷 掃描會員</div>
         
         <div id="action-panel" class="panel">
             <div style="background:white; padding:10px; font-weight:bold; color: #c97288; border: 1px solid #fcdce2; border-radius: 6px; text-align: center;" id="customer-name-display">🌸 請掃描客戶QR code 🌸</div>
@@ -1013,6 +1023,12 @@
                     <input type="number" id="custom-coupon-days-input" value="30" style="display:none; margin-top:8px;">
                 </div>
 
+                <!-- 🔮 新增：4. 欄位 兌換須知選填輸入框 -->
+                <div style="margin-bottom: 15px;">
+                    <label style="font-size:12px; font-weight:bold; color:#6e5b5e;">4. 輸入優惠券兌換須知 (選填)：</label>
+                    <input type="text" id="coupon-note-input" placeholder="例如：限平日使用、需提早預約 (選填)">
+                </div>
+
                 <button class="submit-btn" style="margin:0; padding:10px;" onclick="executeAddNewCoupon()">✨ 立即上架</button>
                 
                 <h4 style="font-size:13px; color:#8a7377; margin:18px 0 8px 0;">📋 目前專區架上總冊：</h4>
@@ -1024,22 +1040,26 @@
     <!-- 彈窗群 -->
     <div id="shop-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">🌸 點數兌換專區</div><div class="modal-text" style="font-size:12px; margin-bottom:12px; color:#8a7377;">點擊下方商品即可扣點兌換</div><div id="shop-grid" class="shop-grid"></div><button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeShopModal()">關閉專區</button></div></div>
     <div id="bag-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">🎫 我的優惠券</div><div id="bag-container" class="bag-list"></div><button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeBagModal()">關閉口袋</button></div></div>
-    <div id="exchange-confirm-overlay" class="modal-overlay"><div class="modal-box" style="border: 2px solid #c97288;"><div class="modal-title">💖 兌換商品確認</div><div id="exchange-confirm-msg" class="modal-text" style="font-size: 14px; padding: 5px 0; font-weight: bold; line-height: 1.5;">確認兌換訊息</div><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeExchangeConfirmModal()">取消</button><button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeExchangeCoupon()">確定</button></div></div></div>
     <div id="use-coupon-confirm-overlay" class="modal-overlay"><div class="modal-box" style="border: 2px solid #c97288;"><div class="modal-title" style="color: #c97288;">❤️ 優惠券確認使用</div><div id="use-coupon-confirm-msg" class="modal-text" style="text-align: left; font-size: 14px; padding: 5px 0; font-weight: bold; line-height: 1.5;"></div><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeUseCouponConfirmModal()">取消</button><button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeUseCustomerCoupon()">確定</button></div></div></div>
     <div id="custom-alert-overlay" class="custom-alert-overlay"><div class="custom-alert-box"><div id="alert-msg" class="custom-alert-text">提示訊息</div><button class="custom-alert-btn" onclick="closeCustomAlert()">確定</button></div></div>
     <div id="boss-login-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">輸入密碼</div><div class="modal-text">請輸入最高階管理密碼</div><input type="password" id="boss-pass-input" placeholder="請輸入最高驗證碼"><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeBossLoginModal()">取消</button><button class="modal-btn-confirm" onclick="confirmBossLogin()">解鎖系統</button></div></div></div>
     <div id="cancel-confirm-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">最高權限操作</div><div id="cancel-confirm-msg" class="modal-text">確定要註銷這筆紀錄嗎？</div><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeCancelConfirmModal()">拒絕</button><button class="modal-btn-confirm" onclick="executeCancelPoint()">確定註銷</button></div></div></div>
     <div id="delete-member-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title" style="color: #d9534f;">🚨 永久刪除會員</div><div id="delete-member-msg" class="modal-text">確認刪除訊息</div><input type="text" id="delete-confirm-input" placeholder="請精準輸入 del" style="margin-top:8px; margin-bottom:5px;"><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeDeleteMemberModal()">取消</button><button class="modal-btn-danger-confirm" onclick="executeDeleteMember()">強行永久刪除</button></div></div></div>
     <div id="unpublish-coupon-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">❌ 下架商品確認</div><div id="unpublish-coupon-msg" class="modal-text"></div><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeUnpublishCouponModal()">取消</button><button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeUnpublishCoupon()">確定移除下架</button></div></div></div>
+    <div id="remark-name-overlay" class="modal-overlay"><div class="modal-box" style="border: 2px dashed #c97288;"><div id="remark-user-title" class="modal-title">修改店家備註姓名</div><div class="modal-text" style="font-size:12px; color:#8a7377;">此備註僅會顯示在店家後台，方便您識別客戶。</div><input type="text" id="remark-name-input" placeholder="例如：李小姐 (每週五固定)"><div class="modal-btn-row" style="margin-top:15px;"><button class="modal-btn-cancel" onclick="closeRemarkModal()">取消</button><button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeSaveRemark()">儲存修改</button></div></div></div>
 
-    <div id="remark-name-overlay" class="modal-overlay">
-        <div class="modal-box" style="border: 2px dashed #c97288;">
-            <div id="remark-user-title" class="modal-title">修改店家備註姓名</div>
-            <div class="modal-text" style="font-size:12px; color:#8a7377;">此備註僅會顯示在店家後台，方便您識別客戶。</div>
-            <input type="text" id="remark-name-input" placeholder="例如：李小姐 (每週五固定)">
+    <!-- 🔮 進化版商品兌換二核彈窗：內嵌動態備註須知展示箱 -->
+    <div id="exchange-confirm-overlay" class="modal-overlay">
+        <div class="modal-box" style="border: 2px solid #c97288; max-width:340px;">
+            <div class="modal-title">💖 兌換商品確認</div>
+            <div id="exchange-confirm-msg" class="modal-text" style="font-size: 15px; padding: 2px 0; font-weight: bold; line-height: 1.4; margin-bottom:8px;">確認兌換訊息</div>
+            
+            <!-- 🔮 動態注意事項灌注點 -->
+            <div id="exchange-confirm-note-box" style="width:100%; box-sizing:border-box; margin-bottom:10px;"></div>
+            
             <div class="modal-btn-row" style="margin-top:15px;">
-                <button class="modal-btn-cancel" onclick="closeRemarkModal()">取消</button>
-                <button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeSaveRemark()">儲存修改</button>
+                <button class="modal-btn-cancel" onclick="closeExchangeConfirmModal()">取消</button>
+                <button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeExchangeCoupon()">確定兌換</button>
             </div>
         </div>
     </div>
