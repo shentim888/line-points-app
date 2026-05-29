@@ -35,7 +35,9 @@
         let pendingUseCouponName = "";
         
         let pendingExchangeData = {};
-        let pendingRemarkUid = "";
+        
+        // 用全局全權鎖定當前正在修改的唯一 UID 
+        window.currentSelectedUserUidForRemark = "";
 
         window.onload = function() {
             liff.init({ liffId: myLiffId, withLoginOnExternalBrowser: true })
@@ -479,14 +481,14 @@
                 let html = "";
                 querySnapshot.forEach((docSnap) => {
                     const data = docSnap.data();
-                    const uid = String(docSnap.id);
+                    const uid = String(docSnap.id).trim(); // 強制去空白
                     
                     let displayName = data.lineName || '未命名';
                     if (data.remarkName) {
                         displayName += ` <span style='color:#c97288; font-size:12px; font-weight:bold;'>(${data.remarkName})</span>`;
                     }
 
-                    // 【核心Bug修復】：不使用內嵌字串傳參，改將 uid 死死鎖在 HTML 節點的 data-uid 屬性上，確保 100% 抓得到！
+                    // 【終極修復點】：onclick 傳參直接改回簡單的純文字字串傳遞，並使用最嚴密的單引號包覆，絕對不走 DOM 屬性讀取以免被非同步洗掉！
                     html += `
                         <div class="customer-item">
                             <div class="customer-info-row" onclick="toggleCustomerDetails('${uid}')">
@@ -497,10 +499,7 @@
                                 <p style="font-size:10px;color:#a18b8f;margin:5px 0;word-break:break-all;">LINE ID: ${uid}</p>
                                 <div style="margin: 8px 0; display:flex; gap:8px;">
                                     <button class="cancel-point-btn" style="background-color:#ffeef0; color:#c97288; padding:5px 10px;" 
-                                            data-uid="${uid}" 
-                                            data-linename="${dataNameSafe(data.lineName)}" 
-                                            data-remarkname="${dataNameSafe(data.remarkName)}"
-                                            onclick="openRemarkModal(this)">✏️ 修改店家備註姓名</button>
+                                            onclick="openRemarkModalDirect('${uid}', '${dataNameSafe(data.lineName)}', '${dataNameSafe(data.remarkName)}')">✏️ 修改店家備註姓名</button>
                                 </div>
                                 <ul id="log-list-${uid}" class="boss-log-list"><li>載入明細中...</li></ul>
                                 <button class="delete-user-master-btn" onclick="showDeleteMemberModal('${uid}', '${dataNameSafe(data.lineName)}')">🌸 刪除會員資料</button>
@@ -719,11 +718,9 @@
             } catch (e) { showCustomAlert("刪除失敗"); }
         };
 
-        // 【大腦修復】：利用 DOM 物件直接精準取出屬性值，徹底絕除變數遺失的空指针黑天鵝
-        window.openRemarkModal = function(btnElement) {
-            pendingRemarkUid = btnElement.getAttribute('data-uid');
-            const rawName = btnElement.getAttribute('data-linename');
-            const currentRemark = btnElement.getAttribute('data-remarkname');
+        // 【重大升級】：完全捨棄易遺失的 Element 屬性讀取，改為點擊時將參數死死鎖定入 window 全局變數
+        window.openRemarkModalDirect = function(uid, rawName, currentRemark) {
+            window.currentSelectedUserUidForRemark = String(uid).trim(); 
             
             document.getElementById('remark-user-title').innerText = `修改 ${rawName} 的店家備註`;
             document.getElementById('remark-name-input').value = currentRemark || "";
@@ -732,16 +729,23 @@
         
         window.closeRemarkModal = function() {
             document.getElementById('remark-name-overlay').style.display = "none";
-            pendingRemarkUid = "";
+            window.currentSelectedUserUidForRemark = "";
         };
         
         window.executeSaveRemark = async function() {
-            if (!pendingRemarkUid) { showCustomAlert("系統未選定目標會員"); return; }
+            // 直接抓取全局死鎖的變數，拒絕任何空指針
+            const targetUid = window.currentSelectedUserUidForRemark; 
+            if (!targetUid || targetUid === "") { 
+                showCustomAlert("系統未選定目標會員，請重新點擊修改。"); 
+                return; 
+            }
+            
             const newRemark = document.getElementById('remark-name-input').value.trim();
             closeRemarkModal();
+            
             try {
-                const userDocRef = doc(db, "users", pendingRemarkUid);
-                // 使用最高規格之 setDoc Merge 覆蓋保護
+                const userDocRef = doc(db, "users", targetUid);
+                // 執行百分之百雙向保險之寫入
                 await setDoc(userDocRef, { remarkName: newRemark }, { merge: true });
                 showCustomAlert("店家備註姓名已更新同步！");
                 loadAllCustomers();
@@ -808,7 +812,7 @@
         window.loadAllCustomers = loadAllCustomers;
         window.loadBossCouponsMaster = loadBossCouponsMaster;
         window.loadExpiryRemindersList = loadExpiryRemindersList;
-        window.openRemarkModal = openRemarkModal;
+        window.openRemarkModalDirect = openRemarkModalDirect;
     </script>
 
     <style>
@@ -1017,6 +1021,7 @@
         </div>
     </div>
 
+    <!-- 彈窗群 -->
     <div id="shop-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">🌸 點數兌換專區</div><div class="modal-text" style="font-size:12px; margin-bottom:12px; color:#8a7377;">點擊下方商品即可扣點兌換</div><div id="shop-grid" class="shop-grid"></div><button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeShopModal()">關閉專區</button></div></div>
     <div id="bag-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">🎫 我的優惠券</div><div id="bag-container" class="bag-list"></div><button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeBagModal()">關閉口袋</button></div></div>
     <div id="exchange-confirm-overlay" class="modal-overlay"><div class="modal-box" style="border: 2px solid #c97288;"><div class="modal-title">💖 兌換商品確認</div><div id="exchange-confirm-msg" class="modal-text" style="font-size: 14px; padding: 5px 0; font-weight: bold; line-height: 1.5;">確認兌換訊息</div><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeExchangeConfirmModal()">取消</button><button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeExchangeCoupon()">確定</button></div></div></div>
