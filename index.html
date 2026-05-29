@@ -293,8 +293,8 @@
             document.getElementById('shop-overlay').style.display = "flex";
             
             try {
-                // 【終極調整2】：前端顧客看到的商城排序，一併調整為「所需點數由少到多」排序
-                const q = query(collection(db, "coupons"), orderBy("cost", "asc"));
+                // 【優化與修改項目1】：點數兌換專區調整為「點數最多的在最前面（降冪排序）」
+                const q = query(collection(db, "coupons"), orderBy("cost", "desc"));
                 const qSnapshot = await getDocs(q);
                 if (qSnapshot.empty) {
                     grid.innerHTML = "<div style='grid-column: span 2; color:#a18b8f; padding:20px;'>目前專區架上空空如也。</div>";
@@ -389,7 +389,7 @@
                     detail: `花費 ${cost} 點兌換成功`
                 });
 
-                showCustomAlert(`🎉 成功兌換【${cName}】！\n已自餘額扣除 ${cost} 點，請於 ${targetValidDays} 天內使用完畢。`);
+                showCustomAlert("🎉 成功兌換【" + cName + "】！\n已自餘額扣除 " + cost + " 點，請於 " + targetValidDays + " 天內使用完畢。");
                 document.getElementById('points-display').innerText = newPoints; 
                 
                 loadPointHistory(currentLiffUserId);
@@ -405,21 +405,33 @@
             document.getElementById('bag-overlay').style.display = "flex";
             if (!currentLiffUserId) return;
             getDocs(collection(db, "users", currentLiffUserId, "coupon_wallet")).then(userBagSnapshot => {
-                let html = "";
+                
+                // 【優化與修改項目2】：將客戶口袋中的優惠券，依據「即將過期的排在最前面」重新排列
+                let activeCoupons = [];
                 userBagSnapshot.forEach(docSnap => {
                     const wData = docSnap.data();
-                    if (wData.status !== "unused") return; 
-                    const isExpired = new Date() > new Date(wData.expiredAt);
-                    if (isExpired) return; 
+                    if (wData.status === "unused" && (new Date() <= new Date(wData.expiredAt))) {
+                        activeCoupons.push({
+                            id: docSnap.id,
+                            name: wData.name,
+                            expiredAt: wData.expiredAt,
+                            expTime: new Date(wData.expiredAt).getTime()
+                        });
+                    }
+                });
 
-                    const wid = docSnap.id;
+                // 按過期時間由小到大排序（最快過期的排第一）
+                activeCoupons.sort((a, b) => a.expTime - b.expTime);
+
+                let html = "";
+                activeCoupons.forEach(coupon => {
                     html += `
                         <div class="bag-item">
                             <div style="text-align:left; max-width: 65%;">
-                                <div class="bag-item-title">🎀 ${wData.name}</div>
-                                <div class="bag-item-date">🌸 有效期至: ${new Date(wData.expiredAt).toLocaleDateString()}</div>
+                                <div class="bag-item-title">🎀 ${coupon.name}</div>
+                                <div class="bag-item-date">🌸 有效期至: ${new Date(coupon.expiredAt).toLocaleDateString()}</div>
                             </div>
-                            <button class="bag-use-btn" onclick="showUseCouponConfirmModal('${wid}', '${dataNameSafe(wData.name)}')">立即使用</button>
+                            <button class="bag-use-btn" onclick="showUseCouponConfirmModal('${coupon.id}', '${dataNameSafe(coupon.name)}')">立即使用</button>
                         </div>`;
                 });
                 container.innerHTML = html || "<div style='padding:30px; color:#a18b8f;'>您目前口袋空空，快去專區用點數兌換吧！</div>";
@@ -523,8 +535,6 @@
                 const endRangeTime = todayMidnight.getTime() + (21 * 24 * 60 * 60 * 1000); 
 
                 const querySnapshot = await getDocs(collection(db, "users"));
-                
-                // 為了實作「越靠近過期日的排在最上方」
                 let allReminderItems = [];
 
                 for (const userDoc of querySnapshot.docs) {
@@ -547,7 +557,7 @@
                                         type: "points",
                                         expTimestamp: expTime,
                                         userName: userName,
-                                        // 【優化項目1】：項目更名為「點數過期」
+                                        // 【優化與修改項目3】：徹底拿掉原本的 "項目：" 字樣
                                         projectLabel: "點數過期",
                                         badgeText: `⚠️ 有【 ${p.pointsObtained} 點 】點數`,
                                         dateStr: new Date(p.expiredAt).toLocaleDateString('zh-TW', {month:'2-digit', day:'2-digit'}),
@@ -571,7 +581,7 @@
                                         type: "coupon",
                                         expTimestamp: expTime,
                                         userName: userName,
-                                        // 【優化項目2】：項目更名為「兌換券過期」
+                                        // 【優化與修改項目3】：徹底拿掉原本的 "項目：" 字樣
                                         projectLabel: "兌換券過期",
                                         badgeText: `🎀 【 ${c.name} 】1 張`,
                                         dateStr: new Date(c.expiredAt).toLocaleDateString('zh-TW', {month:'2-digit', day:'2-digit'}),
@@ -584,17 +594,17 @@
                     });
                 }
 
-                // 【核心重要排序邏輯】：將陣列依照過期時間戳記進行「由小到大（最快到期的在最上面）」排序
                 allReminderItems.sort((a, b) => a.expTimestamp - b.expTimestamp);
 
                 let html = "";
                 allReminderItems.forEach(item => {
+                    // 渲染優化：清爽呈現，絕不透出「項目：」
                     html += `
                         <div class="customer-item" style="${item.borderStyle} margin-bottom:6px; padding:10px 12px;">
                             <div style="display:flex; justify-content:space-between; align-items:center;">
                                 <div>
                                     <strong style="color:#5c4d50; font-size:14px;">🌸 ${item.userName}</strong>
-                                    <div style="font-size:11px; color:#a18b8f; margin-top:2px;">項目：${item.projectLabel}</div>
+                                    <div style="font-size:12px; color:#c97288; font-weight:bold; margin-top:2px;">${item.projectLabel}</div>
                                 </div>
                                 <div style="text-align:right;">
                                     <div style="color:${item.type === 'points' ? '#c97288' : '#8a7377'}; font-size:13px; font-weight:bold;">${item.badgeText}</div>
@@ -604,7 +614,7 @@
                         </div>`;
                 });
 
-                box.innerHTML = html || `<div style="text-align:center; padding:30px; color:#a18b8f; font-size:13px;">📅 盤點完畢！<br>未來 21 天之內，沒有 any 客戶的點數或券到期。</div>`;
+                box.innerHTML = html || "<div style='text-align:center; padding:30px; color:#a18b8f; font-size:13px;'>📅 盤點完畢！<br>未來 21 天之內，沒有 any 客戶的點數或券到期。</div>";
                 
             } catch (e) {
                 box.innerHTML = "<div style='color:red; text-align:center;'>清單讀取失敗，請重試。</div>";
@@ -615,8 +625,8 @@
             const box = document.getElementById('boss-coupons-master-list');
             box.innerHTML = "<div style='color:#a18b8f; font-size:12px;'>商品架盤點中...</div>";
             try {
-                // 【優化項目4】：後台總冊排列順序，一律固定為「所需兌換點數由少到多」排序
-                const q = query(collection(db, "coupons"), orderBy("cost", "asc"));
+                // 【優化與修改項目1】：已上架兌換券後台同步調整為「點數最多的在最前面（降冪排序）」
+                const q = query(collection(db, "coupons"), orderBy("cost", "desc"));
                 const qSnapshot = await getDocs(q);
                 if (qSnapshot.empty) { box.innerHTML = "<p style='font-size:12px; color:#a18b8f;'>目前總專區架上沒有商品。</p>"; return; }
                 let html = "";
@@ -626,7 +636,6 @@
                     let daysLimit = cData.validDays !== undefined ? cData.validDays : 30;
                     const cNote = cData.note || "（店家無填寫特殊須知備註）";
                     
-                    // 【優化項目3】：標題更名為簡潔的「備註：」
                     html += `
                         <div style="border:1px solid #fcdce2; background:white; margin-bottom:6px; border-radius:8px; overflow:hidden;">
                             <div style="display:flex; justify-content:space-between; align-items:center; padding:10px; background:#fffdfd; cursor:pointer;" onclick="toggleBossCouponNote('${cid}')">
@@ -936,14 +945,14 @@
             <div id="qrcode" class="qrcode-section"></div>
         </div>
         
-        <div class="accordion-btn" onclick="toggleAccordion('points-accordion-box')">
+        <div class="card accordion-btn" onclick="toggleAccordion('points-accordion-box')">
             <span>✨ 點數收支歷史紀錄</span><span id="points-accordion-box-icon">➕</span>
         </div>
         <div id="points-accordion-box" class="accordion-content">
             <ul id="history-list" class="history-list"><li>載入中...</li></ul>
         </div>
 
-        <div class="accordion-btn" onclick="toggleAccordion('coupon-accordion-box')">
+        <div class="card accordion-btn" onclick="toggleAccordion('coupon-accordion-box')">
             <span>💖 優惠券兌換歷史紀錄</span><span id="coupon-accordion-box-icon">➕</span>
         </div>
         <div id="coupon-accordion-box" class="accordion-content">
@@ -1016,7 +1025,8 @@
         </div>
 
         <div id="reminder-list-page" style="display:none;">
-            <button class="scan-btn" style="margin: 5px 0 15px 0; padding:10px; font-size:14px; background-color:#fff0f2;" onclick="loadExpiryRemindersList()">🔍 立即盤點未來 21 天內即將過期清單</button>
+            <!-- 【優化與修改項目4】：按鈕名稱精準修改為「未來 21 天內即將過期清單」 -->
+            <button class="scan-btn" style="margin: 5px 0 15px 0; padding:10px; font-size:14px; background-color:#fff0f2;" onclick="loadExpiryRemindersList()">🔍 未來 21 天內即將過期清單</button>
             <div id="boss-reminder-list" class="customer-list-container"></div>
         </div>
 
@@ -1054,6 +1064,7 @@
         </div>
     </div>
 
+    <!-- 彈窗群 -->
     <div id="shop-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">🌸 點數兌換專區</div><div class="modal-text" style="font-size:12px; margin-bottom:12px; color:#8a7377;">點擊下方商品即可扣點兌換</div><div id="shop-grid" class="shop-grid"></div><button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeShopModal()">關閉專區</button></div></div>
     <div id="bag-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">🎫 我的優惠券</div><div id="bag-container" class="bag-list"></div><button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeBagModal()">關閉口袋</button></div></div>
     <div id="use-coupon-confirm-overlay" class="modal-overlay"><div class="modal-box" style="border: 2px solid #c97288;"><div class="modal-title" style="color: #c97288;">❤️ 優惠券確認使用</div><div id="use-coupon-confirm-msg" class="modal-text" style="text-align: left; font-size: 14px; padding: 5px 0; font-weight: bold; line-height: 1.5;"></div><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeUseCouponConfirmModal()">取消</button><button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeUseCustomerCoupon()">確定</button></div></div></div>
