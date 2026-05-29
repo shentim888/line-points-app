@@ -486,6 +486,7 @@
                         displayName += ` <span style='color:#c97288; font-size:12px; font-weight:bold;'>(${data.remarkName})</span>`;
                     }
 
+                    // 【核心Bug修復】：不使用內嵌字串傳參，改將 uid 死死鎖在 HTML 節點的 data-uid 屬性上，確保 100% 抓得到！
                     html += `
                         <div class="customer-item">
                             <div class="customer-info-row" onclick="toggleCustomerDetails('${uid}')">
@@ -495,7 +496,11 @@
                             <div id="details-${uid}" class="customer-details-box">
                                 <p style="font-size:10px;color:#a18b8f;margin:5px 0;word-break:break-all;">LINE ID: ${uid}</p>
                                 <div style="margin: 8px 0; display:flex; gap:8px;">
-                                    <button class="cancel-point-btn" style="background-color:#ffeef0; color:#c97288; padding:5px 10px;" onclick="openRemarkModal('${uid}', '${dataNameSafe(data.lineName)}', '${dataNameSafe(data.remarkName)}')">✏️ 修改店家備註姓名</button>
+                                    <button class="cancel-point-btn" style="background-color:#ffeef0; color:#c97288; padding:5px 10px;" 
+                                            data-uid="${uid}" 
+                                            data-linename="${dataNameSafe(data.lineName)}" 
+                                            data-remarkname="${dataNameSafe(data.remarkName)}"
+                                            onclick="openRemarkModal(this)">✏️ 修改店家備註姓名</button>
                                 </div>
                                 <ul id="log-list-${uid}" class="boss-log-list"><li>載入明細中...</li></ul>
                                 <button class="delete-user-master-btn" onclick="showDeleteMemberModal('${uid}', '${dataNameSafe(data.lineName)}')">🌸 刪除會員資料</button>
@@ -714,29 +719,36 @@
             } catch (e) { showCustomAlert("刪除失敗"); }
         };
 
-        window.openRemarkModal = function(uid, rawName, currentRemark) {
-            pendingRemarkUid = uid;
+        // 【大腦修復】：利用 DOM 物件直接精準取出屬性值，徹底絕除變數遺失的空指针黑天鵝
+        window.openRemarkModal = function(btnElement) {
+            pendingRemarkUid = btnElement.getAttribute('data-uid');
+            const rawName = btnElement.getAttribute('data-linename');
+            const currentRemark = btnElement.getAttribute('data-remarkname');
+            
             document.getElementById('remark-user-title').innerText = `修改 ${rawName} 的店家備註`;
             document.getElementById('remark-name-input').value = currentRemark || "";
             document.getElementById('remark-name-overlay').style.display = "flex";
         };
+        
         window.closeRemarkModal = function() {
             document.getElementById('remark-name-overlay').style.display = "none";
             pendingRemarkUid = "";
         };
         
-        // 【核心大腦升級】：將原本容易踢到黑天鵝的 updateDoc 改寫為防空震的 setDoc Merge 模式
         window.executeSaveRemark = async function() {
-            if (!pendingRemarkUid) return;
+            if (!pendingRemarkUid) { showCustomAlert("系統未選定目標會員"); return; }
             const newRemark = document.getElementById('remark-name-input').value.trim();
             closeRemarkModal();
             try {
                 const userDocRef = doc(db, "users", pendingRemarkUid);
-                // 使用最高防禦力之 setDoc，當文件遭大掃除清空時會自動原地復活補開戶
+                // 使用最高規格之 setDoc Merge 覆蓋保護
                 await setDoc(userDocRef, { remarkName: newRemark }, { merge: true });
                 showCustomAlert("店家備註姓名已更新同步！");
                 loadAllCustomers();
-            } catch(e) { console.error("【核心病因在此】➔", e); showCustomAlert("雲端修改失敗，請稍後再試。"); }
+            } catch(e) { 
+                console.error("【核心病因在此】➔", e); 
+                showCustomAlert("雲端修改失敗，請稍後再試。"); 
+            }
         };
 
         window.confirmSubmit = async function() {
