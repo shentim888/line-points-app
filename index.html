@@ -162,7 +162,7 @@
                 document.getElementById('customer-view').style.display = "none";
                 document.getElementById('staff-view').style.display = "none";
                 document.getElementById('boss-view').style.display = "block";
-                showCustomAlert("歡迎美麗老闆娘登入最高階系統");
+                showCustomAlert("歡迎登入高階後台系統");
                 switchBossTab('customer-list-page');
             } else {
                 closeBossLoginModal(); 
@@ -333,9 +333,9 @@
             try {
                 const couponDocRef = doc(db, "coupons", cid);
                 const couponDocSnap = await getDoc(couponDocRef);
-                let targetValidDays = 60; 
+                let targetValidDays = 30; 
                 if (couponDocSnap.exists() && couponDocSnap.data().validDays !== undefined) {
-                    targetValidDays = parseInt(couponDocSnap.data().validDays) || 60;
+                    targetValidDays = parseInt(couponDocSnap.data().validDays) || 30;
                 }
 
                 const userDocRef = doc(db, "users", currentLiffUserId);
@@ -360,7 +360,7 @@
                     obtainedAt: now.toISOString(),
                     expiredAt: now.toISOString(),
                     status: "deducted",
-                    remark: `專區兌換: ${cName}`
+                    remark: `專專兌換: ${cName}`
                 });
 
                 await addDoc(collection(db, "users", currentLiffUserId, "coupon_wallet"), {
@@ -585,7 +585,7 @@
                 qSnapshot.forEach(docSnap => {
                     const cData = docSnap.data();
                     const cid = docSnap.id;
-                    let daysLimit = cData.validDays !== undefined ? cData.validDays : 60;
+                    let daysLimit = cData.validDays !== undefined ? cData.validDays : 30;
                     
                     html += `
                         <div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid #fff0f2; background:white; margin-bottom:5px; border-radius:6px; border:1px solid #fcdce2;">
@@ -603,7 +603,8 @@
         window.executeAddNewCoupon = async function() {
             const name = document.getElementById('coupon-name-input').value.trim();
             const cost = parseInt(document.getElementById('coupon-cost-input').value);
-            const validDays = parseInt(document.getElementById('custom-coupon-days-input').value) || 60; 
+            // 【優化項目】：上架優惠券若未手動選天數，底層初始防呆直接預設為 30 天
+            const validDays = parseInt(document.getElementById('custom-coupon-days-input').value) || 30; 
             
             if (!name) { showCustomAlert("請輸入優惠券名稱！"); return; }
             if (isNaN(cost) || cost <= 0) { showCustomAlert("所需點數必須大於 0 的數字！"); return; }
@@ -617,9 +618,10 @@
                 });
                 showCustomAlert(`✨ 成功上架【${name}】！`);
                 document.getElementById('coupon-name-input').value = "";
-                document.getElementById('rb-coupon-60days').checked = true;
+                // 【優化項目】：上架成功後，自動將 Radio 按鈕狀態勾回預設的 30 天
+                document.getElementById('rb-coupon-30days').checked = true;
                 document.getElementById('coupon-cost-input').value = 3; 
-                window.setCouponExpireDays(60);
+                window.setCouponExpireDays(30);
                 loadBossCouponsMaster();
             } catch(e) { showCustomAlert("上架失敗"); }
         };
@@ -920,7 +922,7 @@
     </div>
 
     <div id="boss-view" style="display:none; background-color: #fffbfc; padding: 15px 5px;" class="card">
-        <h2>美麗老闆娘後台系統</h2>
+        <h2>高階後台系統</h2>
         
         <div class="boss-nav-tabs">
             <button id="tab-btn-cust" class="boss-tab-btn tab-active" onclick="switchBossTab('customer-list-page')">❤️ 會員名冊</button>
@@ -953,10 +955,12 @@
                 <div id="coupon-expiry-group" style="margin: 15px 0;">
                     <label style="font-size:12px; font-weight:bold; color:#6e5b5e;">3. 設定優惠券有效期限：</label>
                     <div class="radio-group">
-                        <label class="radio-btn"><input type="radio" id="rb-coupon-60days" name="coupon_expiry" onclick="setCouponExpireDays(60)" checked>2 個月</label>
+                        <!-- 【優化與修改項目】：預設按鈕由 60天(2個月) 改為 30 天 -->
+                        <label class="radio-btn"><input type="radio" id="rb-coupon-30days" name="coupon_expiry" onclick="setCouponExpireDays(30)" checked>30 天</label>
                         <label class="radio-btn"><input type="radio" name="coupon_expiry" onclick="setCouponExpireDays('custom')">自訂天數</label>
                     </div>
-                    <input type="number" id="custom-coupon-days-input" value="60" style="display:none; margin-top:8px;">
+                    <!-- 【優化與修改項目】：隱藏自訂輸入框預設初始值同步調校為 30 -->
+                    <input type="number" id="custom-coupon-days-input" value="30" style="display:none; margin-top:8px;">
                 </div>
 
                 <button class="submit-btn" style="margin:0; padding:10px;" onclick="executeAddNewCoupon()">✨ 立即上架</button>
