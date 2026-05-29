@@ -35,8 +35,6 @@
         let pendingUseCouponName = "";
         
         let pendingExchangeData = {};
-        
-        // 專供修改備註姓名暫存使用
         let pendingRemarkUid = "";
 
         window.onload = function() {
@@ -69,7 +67,7 @@
                 if (!userDocSnap.exists()) {
                     await setDoc(userDocRef, {
                         lineName: displayName,
-                        remarkName: "", // 初始空備註欄位
+                        remarkName: "", 
                         totalPoints: 0,
                         createdAt: new Date().toISOString()
                     });
@@ -277,9 +275,6 @@
             } catch (e) { document.getElementById('customer-name-display').innerText = "讀取失敗"; }
         }
 
-        // ==========================================
-        // 🛍️ 點數專區與背包功能 (顧客端)
-        // ==========================================
         window.toggleAccordion = function(id) {
             const el = document.getElementById(id);
             const icon = document.getElementById(id + '-icon');
@@ -475,10 +470,6 @@
                 listEl.innerHTML = html;
             } catch(e) { listEl.innerHTML = "<li>優惠券存摺載入失敗</li>"; }
         }
-
-        // ==========================================
-        // 👑 總端高階管理介面 
-        // ==========================================
         
         async function loadAllCustomers() {
             const listEl = document.getElementById('boss-customer-list');
@@ -490,7 +481,6 @@
                     const data = docSnap.data();
                     const uid = String(docSnap.id);
                     
-                    // 核心升級：若有客製化改名備註，高亮呈現在大腦介面上
                     let displayName = data.lineName || '未命名';
                     if (data.remarkName) {
                         displayName += ` <span style='color:#c97288; font-size:12px; font-weight:bold;'>(${data.remarkName})</span>`;
@@ -724,7 +714,6 @@
             } catch (e) { showCustomAlert("刪除失敗"); }
         };
 
-        // 啟動修改備註姓名視窗
         window.openRemarkModal = function(uid, rawName, currentRemark) {
             pendingRemarkUid = uid;
             document.getElementById('remark-user-title').innerText = `修改 ${rawName} 的店家備註`;
@@ -735,13 +724,16 @@
             document.getElementById('remark-name-overlay').style.display = "none";
             pendingRemarkUid = "";
         };
+        
+        // 【核心大腦升級】：將原本容易踢到黑天鵝的 updateDoc 改寫為防空震的 setDoc Merge 模式
         window.executeSaveRemark = async function() {
             if (!pendingRemarkUid) return;
             const newRemark = document.getElementById('remark-name-input').value.trim();
             closeRemarkModal();
             try {
                 const userDocRef = doc(db, "users", pendingRemarkUid);
-                await updateDoc(userDocRef, { remarkName: newRemark });
+                // 使用最高防禦力之 setDoc，當文件遭大掃除清空時會自動原地復活補開戶
+                await setDoc(userDocRef, { remarkName: newRemark }, { merge: true });
                 showCustomAlert("店家備註姓名已更新同步！");
                 loadAllCustomers();
             } catch(e) { showCustomAlert("雲端修改失敗，請稍後再試。"); }
