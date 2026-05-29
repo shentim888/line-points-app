@@ -736,7 +736,7 @@
                 await setDoc(userDocRef, { remarkName: newRemark }, { merge: true });
                 showCustomAlert("店家備註姓名已更新同步！");
                 loadAllCustomers();
-            } catch(e) { showCustomAlert("雲端修改失敗，請稍後再試。"); }
+            } catch(e) { console.error("【核心病因在此】➔", e); showCustomAlert("雲端修改失敗，請稍後再試。"); }
         };
 
         window.confirmSubmit = async function() {
