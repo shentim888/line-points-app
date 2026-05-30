@@ -60,6 +60,7 @@
                 .catch(err => showCustomAlert("系統連線失敗，請重開 LINE 再試。"));
         };
 
+        // 【依您的指令優化】：老客戶再次登入時，主動發動 updateDoc 同步覆蓋最新 LINE 名稱，絕不發動任何商品複製自動鋪貨。
         async function checkAndCreateUserWallet(userId, displayName) {
             try {
                 const userDocRef = doc(db, "users", userId);
@@ -73,6 +74,8 @@
                     });
                     document.getElementById('points-display').innerText = "0";
                 } else {
+                    // 核心修改處：當老客戶一踏入系統，順手將最新暱稱打入雲端覆蓋，主動對齊美麗老闆娘的名冊
+                    await updateDoc(userDocRef, { lineName: displayName });
                     document.getElementById('points-display').innerText = userDocSnap.data().totalPoints || 0;
                 }
             } catch (e) {
@@ -293,7 +296,6 @@
             document.getElementById('shop-overlay').style.display = "flex";
             
             try {
-                // 【優化與修改項目1】：點數兌換專區調整為「點數最多的在最前面（降冪排序）」
                 const q = query(collection(db, "coupons"), orderBy("cost", "desc"));
                 const qSnapshot = await getDocs(q);
                 if (qSnapshot.empty) {
@@ -405,8 +407,6 @@
             document.getElementById('bag-overlay').style.display = "flex";
             if (!currentLiffUserId) return;
             getDocs(collection(db, "users", currentLiffUserId, "coupon_wallet")).then(userBagSnapshot => {
-                
-                // 【優化與修改項目2】：將客戶口袋中的優惠券，依據「即將過期的排在最前面」重新排列
                 let activeCoupons = [];
                 userBagSnapshot.forEach(docSnap => {
                     const wData = docSnap.data();
@@ -420,7 +420,6 @@
                     }
                 });
 
-                // 按過期時間由小到大排序（最快過期的排第一）
                 activeCoupons.sort((a, b) => a.expTime - b.expTime);
 
                 let html = "";
@@ -557,7 +556,6 @@
                                         type: "points",
                                         expTimestamp: expTime,
                                         userName: userName,
-                                        // 【優化與修改項目3】：徹底拿掉原本的 "項目：" 字樣
                                         projectLabel: "點數過期",
                                         badgeText: `⚠️ 有【 ${p.pointsObtained} 點 】點數`,
                                         dateStr: new Date(p.expiredAt).toLocaleDateString('zh-TW', {month:'2-digit', day:'2-digit'}),
@@ -581,7 +579,6 @@
                                         type: "coupon",
                                         expTimestamp: expTime,
                                         userName: userName,
-                                        // 【優化與修改項目3】：徹底拿掉原本的 "項目：" 字樣
                                         projectLabel: "兌換券過期",
                                         badgeText: `🎀 【 ${c.name} 】1 張`,
                                         dateStr: new Date(c.expiredAt).toLocaleDateString('zh-TW', {month:'2-digit', day:'2-digit'}),
@@ -598,7 +595,6 @@
 
                 let html = "";
                 allReminderItems.forEach(item => {
-                    // 渲染優化：清爽呈現，絕不透出「項目：」
                     html += `
                         <div class="customer-item" style="${item.borderStyle} margin-bottom:6px; padding:10px 12px;">
                             <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -625,7 +621,6 @@
             const box = document.getElementById('boss-coupons-master-list');
             box.innerHTML = "<div style='color:#a18b8f; font-size:12px;'>商品架盤點中...</div>";
             try {
-                // 【優化與修改項目1】：已上架兌換券後台同步調整為「點數最多的在最前面（降冪排序）」
                 const q = query(collection(db, "coupons"), orderBy("cost", "desc"));
                 const qSnapshot = await getDocs(q);
                 if (qSnapshot.empty) { box.innerHTML = "<p style='font-size:12px; color:#a18b8f;'>目前總專區架上沒有商品。</p>"; return; }
@@ -882,7 +877,7 @@
         .bag-use-btn { padding: 6px 12px; background: #c97288; color: white; border: none; border-radius: 6px; font-weight: bold; font-size: 11px; cursor: pointer; flex-shrink: 0; }
 
         .boss-nav-tabs { display: flex; gap: 6px; width: 98%; max-width: 370px; margin: 0 auto 15px auto; justify-content: space-between; }
-        .boss-tab-btn { flex: 1; padding: 10px 4px; border-radius: 10px; border: 1px solid #fcdce2; background: white; color: #8a7377; font-weight: bold; font-size: 12px; cursor: pointer; white-space: nowrap; }
+        .boss-nav-tabs button { border: 1px solid #fcdce2; background: white; color: #8a7377; font-weight: bold; font-size: 12px; cursor: pointer; white-space: nowrap; }
         .tab-active { background: #c97288 !important; color: white !important; border-color: #c97288 !important; }
 
         .factory-box { background: #fff5f6; padding: 15px; border-radius: 12px; border: 1px dashed #c97288; margin-top: 5px; text-align: left; }
@@ -923,6 +918,7 @@
         .modal-btn-cancel { flex: 1; background: #fff; color: #a18b8f; border: 1px solid #fcdce2; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; }
         .modal-btn-confirm { flex: 1; background: #ffeef0; color: #c97288; border: none; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; }
         .modal-btn-danger-confirm { flex: 1; background: #d9534f; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; }
+        .boss-tab-btn { flex: 1; padding: 10px 4px; border-radius: 10px; border: 1px solid #fcdce2; background: white; color: #8a7377; font-weight: bold; font-size: 12px; cursor: pointer; white-space: nowrap; }
     </style>
 </head>
 <body>
@@ -1025,7 +1021,6 @@
         </div>
 
         <div id="reminder-list-page" style="display:none;">
-            <!-- 【優化與修改項目4】：按鈕名稱精準修改為「未來 21 天內即將過期清單」 -->
             <button class="scan-btn" style="margin: 5px 0 15px 0; padding:10px; font-size:14px; background-color:#fff0f2;" onclick="loadExpiryRemindersList()">🔍 未來 21 天內即將過期清單</button>
             <div id="boss-reminder-list" class="customer-list-container"></div>
         </div>
@@ -1064,11 +1059,10 @@
         </div>
     </div>
 
-    <!-- 彈窗群 -->
     <div id="shop-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">🌸 點數兌換專區</div><div class="modal-text" style="font-size:12px; margin-bottom:12px; color:#8a7377;">點擊下方商品即可扣點兌換</div><div id="shop-grid" class="shop-grid"></div><button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeShopModal()">關閉專區</button></div></div>
     <div id="bag-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">🎫 我的優惠券</div><div id="bag-container" class="bag-list"></div><button class="modal-btn-cancel" style="width:100%; margin-top:15px;" onclick="closeBagModal()">關閉口袋</button></div></div>
-    <div id="use-coupon-confirm-overlay" class="modal-overlay"><div class="modal-box" style="border: 2px solid #c97288;"><div class="modal-title" style="color: #c97288;">❤️ 優惠券確認使用</div><div id="use-coupon-confirm-msg" class="modal-text" style="text-align: left; font-size: 14px; padding: 5px 0; font-weight: bold; line-height: 1.5;"></div><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeUseCouponConfirmModal()">取消</button><button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeUseCustomerCoupon()">確定</button></div></div></div>
     <div id="custom-alert-overlay" class="custom-alert-overlay"><div class="custom-alert-box"><div id="alert-msg" class="custom-alert-text">提示訊息</div><button class="custom-alert-btn" onclick="closeCustomAlert()">確定</button></div></div>
+    <div id="boss-login-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">輸入密碼</div><div class="modal-text">請輸入最高階管理密碼</div><input type="password" id="boss-pass-input" placeholder="請輸入最高驗證碼"><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeBossLoginModal()">取消</button><button class="modal-btn-confirm" onclick="confirmBossLogin()">解鎖系統</button></div></div></div>
     <div id="cancel-confirm-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">最高權限操作</div><div id="cancel-confirm-msg" class="modal-text">確定要註銷這筆紀錄嗎？</div><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeCancelConfirmModal()">拒絕</button><button class="modal-btn-confirm" onclick="executeCancelPoint()">確定註銷</button></div></div></div>
     <div id="delete-member-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title" style="color: #d9534f;">🚨 永久刪除會員</div><div id="delete-member-msg" class="modal-text">確認刪除訊息</div><input type="text" id="delete-confirm-input" placeholder="請精準輸入 del" style="margin-top:8px; margin-bottom:5px;"><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeDeleteMemberModal()">取消</button><button class="modal-btn-danger-confirm" onclick="executeDeleteMember()">強行永久刪除</button></div></div></div>
     <div id="unpublish-coupon-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">❌ 下架商品確認</div><div id="unpublish-coupon-msg" class="modal-text"></div><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeUnpublishCouponModal()">取消</button><button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeUnpublishCoupon()">確定移除下架</button></div></div></div>
