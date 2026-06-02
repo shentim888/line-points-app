@@ -60,7 +60,6 @@
                 .catch(err => showCustomAlert("系統連線失敗，請重開 LINE 再試。"));
         };
 
-        // 【依您的指令優化】：老客戶再次登入時，主動發動 updateDoc 同步覆蓋最新 LINE 名稱，絕不發動任何商品複製自動鋪貨。
         async function checkAndCreateUserWallet(userId, displayName) {
             try {
                 const userDocRef = doc(db, "users", userId);
@@ -74,7 +73,6 @@
                     });
                     document.getElementById('points-display').innerText = "0";
                 } else {
-                    // 核心修改處：當老客戶一踏入系統，順手將最新暱稱打入雲端覆蓋，主動對齊美麗老闆娘的名冊
                     await updateDoc(userDocRef, { lineName: displayName });
                     document.getElementById('points-display').innerText = userDocSnap.data().totalPoints || 0;
                 }
@@ -828,7 +826,14 @@
                 }
 
                 await setDoc(userDocRef, { totalPoints: newPoints }, { merge: true });
-                showCustomAlert("操作成功！最新餘額：" + newPoints);
+                
+                // 【精準修改】：依照指令完全去除「操作成功！」字眼，並精準分流顯示增減明細與最新可用餘額！
+                if (pointsChange > 0) {
+                    showCustomAlert("本次新增 " + pointsChange + " 點，目前餘額：" + newPoints);
+                } else {
+                    showCustomAlert("本次扣除 " + Math.abs(pointsChange) + " 點，目前餘額：" + newPoints);
+                }
+                
                 targetUserId = ""; 
                 document.getElementById('customer-name-display').innerText = "🌸 請掃描客戶QR code 🌸";
                 document.getElementById('points-input').value = "1";
