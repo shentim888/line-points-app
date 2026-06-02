@@ -827,7 +827,6 @@
 
                 await setDoc(userDocRef, { totalPoints: newPoints }, { merge: true });
                 
-                // 【精準修改】：依照指令完全去除「操作成功！」字眼，並精準分流顯示增減明細與最新可用餘額！
                 if (pointsChange > 0) {
                     showCustomAlert("本次新增 " + pointsChange + " 點，目前餘額：" + newPoints);
                 } else {
@@ -1072,16 +1071,6 @@
     <div id="delete-member-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title" style="color: #d9534f;">🚨 永久刪除會員</div><div id="delete-member-msg" class="modal-text">確認刪除訊息</div><input type="text" id="delete-confirm-input" placeholder="請精準輸入 del" style="margin-top:8px; margin-bottom:5px;"><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeDeleteMemberModal()">取消</button><button class="modal-btn-danger-confirm" onclick="executeDeleteMember()">強行永久刪除</button></div></div></div>
     <div id="unpublish-coupon-overlay" class="modal-overlay"><div class="modal-box"><div class="modal-title">❌ 下架商品確認</div><div id="unpublish-coupon-msg" class="modal-text"></div><div class="modal-btn-row"><button class="modal-btn-cancel" onclick="closeUnpublishCouponModal()">取消</button><button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeUnpublishCoupon()">確定移除下架</button></div></div></div>
     <div id="remark-name-overlay" class="modal-overlay"><div class="modal-box" style="border: 2px dashed #c97288;"><div id="remark-user-title" class="modal-title">修改店家備註姓名</div><div class="modal-text" style="font-size:12px; color:#8a7377;">此備註僅會顯示在店家後台，方便您識別客戶。</div><input type="text" id="remark-name-input" placeholder="例如：李小姐 (每週五固定)"><div class="modal-btn-row" style="margin-top:15px;"><button class="modal-btn-cancel" onclick="closeRemarkModal()">取消</button><button class="modal-btn-confirm" style="background:#c97288; color:white;" onclick="executeSaveRemark()">儲存修改</button></div></div></div>
-
-    <div id="boss-login-overlay" class="modal-overlay">
-        <div class="modal-box" style="max-width: 320px; padding: 25px 20px;">
-            <input type="password" id="boss-pass-input" placeholder="請輸入高階管理後台密碼" style="width:100%; padding:15px 12px; font-size:18px; border:2px solid #fcdce2; border-radius:10px; text-align:center; font-weight:bold;">
-            <div class="modal-btn-row" style="margin-top:20px;">
-                <button class="modal-btn-cancel" style="padding:12px;" onclick="closeBossLoginModal()">取消</button>
-                <button class="modal-btn-confirm" style="padding:12px; background:#ffeef0; color:#c97288;" onclick="confirmBossLogin()">解鎖系統</button>
-            </div>
-        </div>
-    </div>
 
     <div id="exchange-confirm-overlay" class="modal-overlay">
         <div class="modal-box" style="border: 2px solid #c97288; max-width:340px;">
