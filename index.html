@@ -38,6 +38,9 @@
         window.currentSelectedUserUidForRemark = "";
 
         window.onload = function() {
+            // 🚀 【自動化核心】：網頁載入時，全自動檢查並在雲端初始化密碼設定
+            autoInitializeCloudPassword();
+
             liff.init({ liffId: myLiffId, withLoginOnExternalBrowser: true })
                 .then(() => {
                     if (!liff.isLoggedIn()) {
@@ -59,6 +62,23 @@
                 })
                 .catch(err => showCustomAlert("系統連線失敗，請重開 LINE 再試。"));
         };
+
+        // 🧠 全自動雲端建置密碼函數
+        async function autoInitializeCloudPassword() {
+            try {
+                const configDocRef = doc(db, "system_config", "admin_settings");
+                const configSnap = await getDoc(configDocRef);
+                // 如果雲端找不到這筆資料，程式在背景悄悄幫妳種下初始密碼，不需要人為介入
+                if (!configSnap.exists()) {
+                    await setDoc(configDocRef, {
+                        staffPassword: "0412",
+                        initializedAt: new Date().toISOString()
+                    });
+                }
+            } catch(e) {
+                console.log("初始化密碼防呆放行");
+            }
+        }
 
         async function checkAndCreateUserWallet(userId, displayName) {
             try {
@@ -159,7 +179,6 @@
             document.getElementById('boss-login-overlay').style.display = "none";
         };
 
-        // 🔐 密碼雲端化：高階後台密碼改為直接讀取該店專屬 Firebase
         window.confirmBossLogin = async function() {
             const bossPass = document.getElementById('boss-pass-input').value;
             try {
@@ -179,7 +198,6 @@
                     setTimeout(() => { showCustomAlert("密碼錯誤，請重新解鎖。"); }, 300); 
                 }
             } catch(e) {
-                // 如果該店雲端尚未建置密碼，自動啟用相容防呆
                 if (bossPass === "0412888" || bossPass === "5678888") {
                     closeBossLoginModal();
                     document.getElementById('customer-view').style.display = "none";
@@ -392,7 +410,7 @@
                     obtainedAt: now.toISOString(),
                     expiredAt: now.toISOString(),
                     status: "deducted",
-                    remark: `專專兌換: ${cName}`
+                    remark: `專區兌換: ${cName}`
                 });
 
                 await addDoc(collection(db, "users", currentLiffUserId, "coupon_wallet"), {
@@ -415,7 +433,7 @@
                 loadPointHistory(currentLiffUserId);
                 loadCustomerCouponHistory(currentLiffUserId);
                 closeShopModal();
-            } catch(e) { showCustomAlert("專專交易失敗，請重試"); }
+            } catch(e) { showCustomAlert("交易失敗，請重試"); }
             finally { shopGrid.style.pointerEvents = "auto"; }
         };
 
@@ -628,7 +646,7 @@
                         </div>`;
                 });
 
-                box.innerHTML = html || "<div style='text-align:center; padding:30px; color:#a18b8f; font-size:13px;'>📅 盤點完畢！<br>未來 21 天之內，沒有 any 客戶的點數或券到期。</div>";
+                box.innerHTML = html || "<div style='text-align:center; padding:30px; color:#a18b8f; font-size:13px;'>📅 盤點完畢！<br>未來 21 天之內，沒有任何客戶的點數或券到期。</div>";
                 
             } catch (e) {
                 box.innerHTML = "<div style='color:red; text-align:center;'>清單讀取失敗，請重試。</div>";
@@ -809,7 +827,6 @@
             const pointsChange = parseInt(document.getElementById('points-input').value);
             if (pointsChange === 0) { showCustomAlert("點數不能為 0"); return; }
             
-            // 🔒 智慧雲端密碼認證：發點數時，程式會全自動連回該店獨立資料庫進行比對
             try {
                 const configDocRef = doc(db, "system_config", "admin_settings");
                 const configSnap = await getDoc(configDocRef);
@@ -820,7 +837,6 @@
                     return; 
                 }
             } catch(e) {
-                // 雲端防呆：若尚未在雲端新增密碼，自動相容一店預設密碼放行
                 let inputPass = document.getElementById('staff-pass').value;
                 if (inputPass !== "0412" && inputPass !== "5678") {
                     showCustomAlert("密碼錯誤且無法連線至雲端資料庫。");
