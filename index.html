@@ -38,7 +38,6 @@
         window.currentSelectedUserUidForRemark = "";
 
         window.onload = function() {
-            // 🚀【自動化防呆】：全自動在雲端建置「獨立雙密碼欄位」
             autoInitializeCloudPassword();
 
             liff.init({ liffId: myLiffId, withLoginOnExternalBrowser: true })
@@ -50,7 +49,7 @@
                         document.getElementById('staff-view').style.display = "none";
                         document.getElementById('boss-view').style.display = "none";
                         
-                        liff.getProfile => {
+                        liff.getProfile().then(profile => {
                             currentLiffUserId = profile.userId; 
                             document.getElementById('username').innerText = "嗨！ " + profile.displayName;
                             checkAndCreateUserWallet(profile.userId, profile.displayName);
@@ -63,20 +62,17 @@
                 .catch(err => showCustomAlert("系統連線失敗，請重開 LINE 再試。"));
         };
 
-        // 🧠 全自動雲端雙密碼格子建置函數
         async function autoInitializeCloudPassword() {
             try {
                 const configDocRef = doc(db, "system_config", "admin_settings");
                 const configSnap = await getDoc(configDocRef);
-                // 如果雲端找不到這筆資料，程式背景全自動種下「完全獨立」的兩個密碼欄位
                 if (!configSnap.exists()) {
                     await setDoc(configDocRef, {
-                        staffPassword: "0412",       // 店員一般密碼預設值
-                        bossPassword: "0412888",     // 老闆高階密碼預設值
+                        staffPassword: "0412",       
+                        bossPassword: "0412888",     
                         initializedAt: new Date().toISOString()
                     });
                 } else {
-                    // 防呆：如果以前建立過但少了 bossPassword，自動幫妳補上格子
                     const currentData = configSnap.data();
                     if (currentData.bossPassword === undefined) {
                         await updateDoc(configDocRef, {
@@ -188,7 +184,6 @@
             document.getElementById('boss-login-overlay').style.display = "none";
         };
 
-        // 🔐 雙密碼獨立認證：高階後台全面核對雲端的 bossPassword 欄位
         window.confirmBossLogin = async function() {
             const bossPass = document.getElementById('boss-pass-input').value;
             try {
@@ -208,7 +203,6 @@
                     setTimeout(() => { showCustomAlert("密碼錯誤，請重新解鎖。"); }, 300); 
                 }
             } catch(e) {
-                // 雲端斷線防呆放行
                 if (bossPass === "0412888" || bossPass === "5678888") {
                     closeBossLoginModal();
                     document.getElementById('customer-view').style.display = "none";
@@ -797,7 +791,7 @@
         };
         window.closeDeleteMemberModal = function() { document.getElementById('delete-member-overlay').style.display = "none"; };
         window.executeDeleteMember = async function() {
-            if (document.getElementById('delete-confirm-input').value.trim() !== "del") { showCustomAlert("驗證字串錯誤"); return; }
+            if (document.getElementById('delete-confirm-input').value.trim() !== "del") { showCustomAlert("驗串錯誤"); return; }
             closeDeleteMemberModal();
             try {
                 await deleteDoc(doc(db, "users", pendingDeleteUid));
