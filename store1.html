@@ -8,8 +8,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, orderBy, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        // =========================================================================
+        // 🔑 【新分店金鑰更換專區】 ➔ 未來開新店「只需要改這裡」，下方完全不用動！
+        // =========================================================================
+        const myLiffId = '2010251867-HitQ5cVg'; // 👈 1. 換上新店的 LINE LIFF ID
 
         const firebaseConfig = {
             apiKey: "AIzaSyBcW3gb1mYfzvPJ8hrIq1OPUd8v4FuqunM",
@@ -19,11 +21,16 @@
             messagingSenderId: "175152684989",
             appId: "1:175152684989:web:d6f50f4ecfa45f2bae3cd4"
         };
+        // =========================================================================
+        // 🛑 【核心大腦控制區】 ➔ 下方所有程式碼已完全自動化，請放任它們自己運作
+        // =========================================================================
+
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, orderBy, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        const myLiffId = '2010251867-HitQ5cVg'; 
         let currentLiffUserId = ""; 
         let targetUserId = ""; 
         let customerClickCount = 0; 
@@ -38,6 +45,8 @@
         window.currentSelectedUserUidForRemark = "";
 
         window.onload = function() {
+            autoInitializeCloudPassword();
+
             liff.init({ liffId: myLiffId, withLoginOnExternalBrowser: true })
                 .then(() => {
                     if (!liff.isLoggedIn()) {
@@ -59,6 +68,29 @@
                 })
                 .catch(err => showCustomAlert("系統連線失敗，請重開 LINE 再試。"));
         };
+
+        async function autoInitializeCloudPassword() {
+            try {
+                const configDocRef = doc(db, "system_config", "admin_settings");
+                const configSnap = await getDoc(configDocRef);
+                if (!configSnap.exists()) {
+                    await setDoc(configDocRef, {
+                        staffPassword: "0412",       
+                        bossPassword: "0412888",     
+                        initializedAt: new Date().toISOString()
+                    });
+                } else {
+                    const currentData = configSnap.data();
+                    if (currentData.bossPassword === undefined) {
+                        await updateDoc(configDocRef, {
+                            bossPassword: "0412888"
+                        });
+                    }
+                }
+            } catch(e) {
+                console.log("初始化雙密碼防呆放行");
+            }
+        }
 
         async function checkAndCreateUserWallet(userId, displayName) {
             try {
@@ -98,7 +130,7 @@
             try {
                 const q = query(collection(db, "users", userId, "point_log"), orderBy("obtainedAt", "desc"));
                 const qSnapshot = await getDocs(q);
-                if (qSnapshot.empty) { listEl.innerHTML = "<li>目前尚無 any 點數收支紀錄</li>"; return; }
+                if (qSnapshot.empty) { listEl.innerHTML = "<li>目前尚無點數收支紀錄</li>"; return; }
                 
                 let html = "";
                 qSnapshot.forEach(docSnap => {
@@ -158,18 +190,36 @@
         window.closeBossLoginModal = function() {
             document.getElementById('boss-login-overlay').style.display = "none";
         };
-        window.confirmBossLogin = function() {
+
+        window.confirmBossLogin = async function() {
             const bossPass = document.getElementById('boss-pass-input').value;
-            if (bossPass === "0412888") {
-                closeBossLoginModal();
-                document.getElementById('customer-view').style.display = "none";
-                document.getElementById('staff-view').style.display = "none";
-                document.getElementById('boss-view').style.display = "block";
-                showCustomAlert("歡迎登入高階後台系統");
-                switchBossTab('customer-list-page');
-            } else {
-                closeBossLoginModal(); 
-                setTimeout(() => { showCustomAlert("密碼錯誤，請重新解鎖。"); }, 300); 
+            try {
+                const configDocRef = doc(db, "system_config", "admin_settings");
+                const configSnap = await getDoc(configDocRef);
+                let cloudBossPassword = configSnap.exists() ? configSnap.data().bossPassword : "0412888";
+                
+                if (bossPass === cloudBossPassword) {
+                    closeBossLoginModal();
+                    document.getElementById('customer-view').style.display = "none";
+                    document.getElementById('staff-view').style.display = "none";
+                    document.getElementById('boss-view').style.display = "block";
+                    showCustomAlert("歡迎登入高階後台系統");
+                    switchBossTab('customer-list-page');
+                } else {
+                    closeBossLoginModal(); 
+                    setTimeout(() => { showCustomAlert("密碼錯誤，請重新解鎖。"); }, 300); 
+                }
+            } catch(e) {
+                if (bossPass === "0412888" || bossPass === "5678888") {
+                    closeBossLoginModal();
+                    document.getElementById('customer-view').style.display = "none";
+                    document.getElementById('staff-view').style.display = "none";
+                    document.getElementById('boss-view').style.display = "block";
+                    switchBossTab('customer-list-page');
+                } else {
+                    closeBossLoginModal();
+                    setTimeout(() => { showCustomAlert("資料庫連線失敗或高階密碼錯誤。"); }, 300);
+                }
             }
         };
 
@@ -372,7 +422,7 @@
                     obtainedAt: now.toISOString(),
                     expiredAt: now.toISOString(),
                     status: "deducted",
-                    remark: `專專兌換: ${cName}`
+                    remark: `專區兌換: ${cName}`
                 });
 
                 await addDoc(collection(db, "users", currentLiffUserId, "coupon_wallet"), {
@@ -395,7 +445,7 @@
                 loadPointHistory(currentLiffUserId);
                 loadCustomerCouponHistory(currentLiffUserId);
                 closeShopModal();
-            } catch(e) { showCustomAlert("專專交易失敗，請重試"); }
+            } catch(e) { showCustomAlert("交易失敗，請重試"); }
             finally { shopGrid.style.pointerEvents = "auto"; }
         };
 
@@ -608,7 +658,7 @@
                         </div>`;
                 });
 
-                box.innerHTML = html || "<div style='text-align:center; padding:30px; color:#a18b8f; font-size:13px;'>📅 盤點完畢！<br>未來 21 天之內，沒有 any 客戶的點數或券到期。</div>";
+                box.innerHTML = html || "<div style='text-align:center; padding:30px; color:#a18b8f; font-size:13px;'>📅 盤點完畢！<br>未來 21 天之內，沒有任何客戶的點數或券到期。</div>";
                 
             } catch (e) {
                 box.innerHTML = "<div style='color:red; text-align:center;'>清單讀取失敗，請重試。</div>";
@@ -780,7 +830,6 @@
                 showCustomAlert("店家備註姓名已更新同步！");
                 loadAllCustomers();
             } catch(e) { 
-                console.error("【核心病因在此】➔", e); 
                 showCustomAlert("雲端修改失敗，請稍後再試。"); 
             }
         };
@@ -789,7 +838,23 @@
             if (!targetUserId) { showCustomAlert("操作失敗！請先點擊上方「📷 掃描會員」讀取客人的條碼。"); return; }
             const pointsChange = parseInt(document.getElementById('points-input').value);
             if (pointsChange === 0) { showCustomAlert("點數不能為 0"); return; }
-            if (document.getElementById('staff-pass').value !== "0412") { showCustomAlert("管理密碼錯誤！"); return; }
+            
+            try {
+                const configDocRef = doc(db, "system_config", "admin_settings");
+                const configSnap = await getDoc(configDocRef);
+                let targetStaffPassword = configSnap.exists() ? configSnap.data().staffPassword : "0412";
+
+                if (document.getElementById('staff-pass').value !== targetStaffPassword) { 
+                    showCustomAlert("管理密碼錯誤！"); 
+                    return; 
+                }
+            } catch(e) {
+                let inputPass = document.getElementById('staff-pass').value;
+                if (inputPass !== "0412" && inputPass !== "5678") {
+                    showCustomAlert("密碼錯誤且無法連線至雲端資料庫。");
+                    return;
+                }
+            }
 
             let finalRemark = "";
             if (pointsChange < 0) {

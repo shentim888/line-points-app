@@ -8,22 +8,29 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, orderBy, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        // =========================================================================
+        // 🔑 【新分店金鑰更換專區】 ➔ 未來開新店「只需要改這裡」，下方完全不用動！
+        // =========================================================================
+        const myLiffId = '2010135064-mXyTOHst'; // 👈 1. 換上新店的 LINE LIFF ID
 
         const firebaseConfig = {
-            apiKey: "AIzaSyAqsN1y3eNHtQ4PiYpWIuxZC8eN6o0bK24",
+            apiKey: "AIzaSyAqsN1y3eNHtQ4PiYpWIuxZC8eN6o0bK24",             // 👈 2. 換上新店的 Firebase 憑證
             authDomain: "line-loyalty-card.firebaseapp.com",
             projectId: "line-loyalty-card",
             storageBucket: "line-loyalty-card.firebasestorage.app",
             messagingSenderId: "284106917293",
             appId: "1:284106917293:web:2675c8c6dfe4d4d27e4d24"
         };
+        // =========================================================================
+        // 🛑 【核心大腦控制區】 ➔ 下方所有程式碼已完全自動化，請放任它們自己運作
+        // =========================================================================
+
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, orderBy, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        const myLiffId = '2010135064-mXyTOHst'; 
         let currentLiffUserId = ""; 
         let targetUserId = ""; 
         let customerClickCount = 0; 
@@ -791,7 +798,7 @@
         };
         window.closeDeleteMemberModal = function() { document.getElementById('delete-member-overlay').style.display = "none"; };
         window.executeDeleteMember = async function() {
-            if (document.getElementById('delete-confirm-input').value.trim() !== "del") { showCustomAlert("驗串錯誤"); return; }
+            if (document.getElementById('delete-confirm-input').value.trim() !== "del") { showCustomAlert("驗證字串錯誤"); return; }
             closeDeleteMemberModal();
             try {
                 await deleteDoc(doc(db, "users", pendingDeleteUid));
